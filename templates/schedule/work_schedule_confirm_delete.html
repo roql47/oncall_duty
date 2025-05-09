@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block title %}근무시간 삭제 - 당직 스케줄 시스템{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6 offset-md-3">
+        <h1 class="mb-4">근무시간 삭제</h1>
+        
+        <div class="card">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0">주의: 삭제 확인</h5>
+            </div>
+            <div class="card-body">
+                <p>다음 근무시간을 정말로 삭제하시겠습니까?</p>
+                
+                <ul class="list-group mb-4">
+                    <li class="list-group-item">
+                        <strong>시작 시간:</strong> {{ object.start_time }}
+                    </li>
+                    <li class="list-group-item">
+                        <strong>종료 시간:</strong> {{ object.end_time }}
+                    </li>
+                    {% if object.description %}
+                    <li class="list-group-item">
+                        <strong>설명:</strong> {{ object.description }}
+                    </li>
+                    {% endif %}
+                </ul>
+                
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> 이 근무시간을 사용하는 일정이 있는 경우 함께 삭제될 수 있습니다.
+                </div>
+                
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="d-flex justify-content-between">
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-trash"></i> 삭제
+                        </button>
+                        <a href="{% url 'schedule:work_schedule_list' %}" class="btn btn-outline-secondary">취소</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

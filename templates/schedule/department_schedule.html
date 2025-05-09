@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ department.name }} {{ year }}년 {{ month }}월 당직 일정 - 당직 스케줄 시스템{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1 class="mb-4">{{ department.name }} - {{ year }}년 {{ month }}월 당직 일정</h1>
+
+        <div class="mb-3">
+            <a href="{% url 'schedule:home' %}" class="btn btn-outline-secondary me-2">
+                홈으로
+            </a>
+            
+            {% with prev_month=month|add:"-1" prev_year=year %}
+                {% if prev_month == 0 %}
+                    {% with prev_month=12 prev_year=year|add:"-1" %}
+                        <a href="{% url 'schedule:department_schedule' department_id=department.id year=prev_year month=prev_month %}" class="btn btn-outline-primary me-2">
+                            이전 달
+                        </a>
+                    {% endwith %}
+                {% else %}
+                    <a href="{% url 'schedule:department_schedule' department_id=department.id year=prev_year month=prev_month %}" class="btn btn-outline-primary me-2">
+                        이전 달
+                    </a>
+                {% endif %}
+            {% endwith %}
+            
+            {% with next_month=month|add:"1" next_year=year %}
+                {% if next_month == 13 %}
+                    {% with next_month=1 next_year=year|add:"1" %}
+                        <a href="{% url 'schedule:department_schedule' department_id=department.id year=next_year month=next_month %}" class="btn btn-outline-primary">
+                            다음 달
+                        </a>
+                    {% endwith %}
+                {% else %}
+                    <a href="{% url 'schedule:department_schedule' department_id=department.id year=next_year month=next_month %}" class="btn btn-outline-primary">
+                        다음 달
+                    </a>
+                {% endif %}
+            {% endwith %}
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">소속 의사 목록</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for doctor in doctors %}
+                    <div class="col-md-4 mb-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">{{ doctor.name }}</h5>
+                                <p class="card-text">{{ doctor.phone_number }}</p>
+                                <a href="{% url 'schedule:doctor_schedule' doctor_id=doctor.id year=year month=month %}" class="btn btn-sm btn-outline-primary">
+                                    개인 일정 보기
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="col-12">
+                        <p>등록된 의사가 없습니다.</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">일정 표</h5>
+            </div>
+            <div class="card-body">
+                <style>
+                    .schedule-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                    }
+                    .schedule-table th, .schedule-table td {
+                        border: 1px solid #dee2e6;
+                        padding: 8px;
+                        text-align: left;
+                        vertical-align: top;
+                    }
+                    .schedule-table th {
+                        background-color: #f8f9fa;
+                    }
+                    .schedule-item {
+                        margin-bottom: 4px;
+                        display: inline-block;
+                        white-space: nowrap;
+                        margin-right: 8px;
+                        background-color: #f1f1f1;
+                        border-radius: 4px;
+                        padding: 2px 5px;
+                    }
+                    .on-call .schedule-item {
+                        background-color: #ffe8e8;
+                    }
+                    .weekend {
+                        background-color: #f8f9fa;
+                    }
+                    .badge-oncall {
+                        font-size: 0.7em;
+                        padding: 2px 5px;
+                        margin-left: 3px;
+                        vertical-align: middle;
+                    }
+                </style>
+                <div class="table-responsive">
+                    <table class="schedule-table">
+                        <thead>
+                            <tr>
+                                <th>날짜</th>
+                                <th>요일</th>
+                                {% for doctor in doctors %}
+                                <th>{{ doctor.name }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for date, schedules in schedules_by_date.items %}
+                            <tr class="{% if date.weekday == 5 or date.weekday == 6 %}weekend{% endif %}">
+                                <td>{{ date|date:"d" }}</td>
+                                <td>{{ date|date:"D"|upper }}</td>
+                                {% for doctor in doctors %}
+                                <td>
+                                    {% for schedule in schedules %}
+                                    {% if schedule.doctor.id == doctor.id %}
+                                    <div class="{% if schedule.is_on_call %}on-call{% endif %}">
+                                        <span class="schedule-item">
+                                            {{ schedule.work_schedule }}
+                                            {% if schedule.is_on_call %}<span class="badge bg-danger badge-oncall">당직</span>{% endif %}
+                                        </span>
+                                    </div>
+                                    {% endif %}
+                                    {% endfor %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="{{ doctors.count|add:2 }}">등록된 일정이 없습니다.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

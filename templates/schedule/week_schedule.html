@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ year }}년 {{ month }}월 {{ week }}주차 일정 - 당직 스케줄 시스템{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>{{ year }}년 {{ month }}월 {{ week }}주차 일정</h1>
+        <div class="btn-group">
+            <a href="{% url 'schedule:month_schedule' year=year month=month %}" class="btn btn-outline-primary">
+                <i class="bi bi-calendar-month"></i> 월간 일정
+            </a>
+            {% if user.is_staff %}
+            <a href="{% url 'schedule:add_schedule' %}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> 일정 추가
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="d-flex justify-content-between mb-2">
+                <a href="{% url 'schedule:week_schedule' year=prev_year month=prev_month week=prev_week %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-chevron-left"></i> 이전 주
+                </a>
+                <div class="btn-group">
+                    <a href="{% url 'schedule:week_schedule' year=year month=month week=1 %}" class="btn btn-outline-primary">1주</a>
+                    <a href="{% url 'schedule:week_schedule' year=year month=month week=2 %}" class="btn btn-outline-primary">2주</a>
+                    <a href="{% url 'schedule:week_schedule' year=year month=month week=3 %}" class="btn btn-outline-primary">3주</a>
+                    <a href="{% url 'schedule:week_schedule' year=year month=month week=4 %}" class="btn btn-outline-primary">4주</a>
+                    {% if last_week > 4 %}
+                    <a href="{% url 'schedule:week_schedule' year=year month=month week=5 %}" class="btn btn-outline-primary">5주</a>
+                    {% endif %}
+                    {% if last_week > 5 %}
+                    <a href="{% url 'schedule:week_schedule' year=year month=month week=6 %}" class="btn btn-outline-primary">6주</a>
+                    {% endif %}
+                </div>
+                <a href="{% url 'schedule:week_schedule' year=next_year month=next_month week=next_week %}" class="btn btn-outline-secondary">
+                    다음 주 <i class="bi bi-chevron-right"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">{{ start_date|date:"Y년 m월 d일" }} ~ {{ end_date|date:"Y년 m월 d일" }}</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 14.28%">월</th>
+                            <th style="width: 14.28%">화</th>
+                            <th style="width: 14.28%">수</th>
+                            <th style="width: 14.28%">목</th>
+                            <th style="width: 14.28%">금</th>
+                            <th style="width: 14.28%" class="table-warning">토</th>
+                            <th style="width: 14.28%" class="table-danger">일</th>
+                        </tr>
+                        <tr>
+                            {% for date, schedules in schedules_by_date.items %}
+                            <th class="text-center {% if date.weekday == 5 %}table-warning{% elif date.weekday == 6 %}table-danger{% endif %}">
+                                {{ date|date:"d" }}
+                            </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="height: 300px;">
+                            {% for date, schedules in schedules_by_date.items %}
+                            <td class="{% if date.weekday == 5 %}table-warning{% elif date.weekday == 6 %}table-danger{% endif %}" valign="top">
+                                <div class="schedule-day">
+                                    {% if schedules %}
+                                    <div class="list-group">
+                                        {% regroup schedules by doctor.department as department_list %}
+                                        {% for department_group in department_list %}
+                                        <div class="mb-2">
+                                            <div class="department-header bg-light py-1 px-2 mb-1 rounded">
+                                                <strong>{{ department_group.grouper.name }}</strong>
+                                            </div>
+                                            {% for schedule in department_group.list %}
+                                            <div class="list-group-item list-group-item-action p-2 mb-1">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <small class="text-primary">{{ schedule.work_schedule.start_time }} - {{ schedule.work_schedule.end_time }}</small>
+                                                    {% if schedule.is_on_call %}<span class="badge bg-danger">당직</span>{% endif %}
+                                                </div>
+                                                <div>
+                                                    <strong>{{ schedule.doctor.name }}</strong>
+                                                    {% if schedule.note %}
+                                                    <small class="text-muted d-block">{{ schedule.note }}</small>
+                                                    {% endif %}
+                                                    <small class="d-block text-muted">{{ schedule.doctor.phone_number }}</small>
+                                                </div>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% else %}
+                                    <p class="text-muted text-center mt-3">일정 없음</p>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            {% endfor %}
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <h4>진료과별 필터</h4>
+        <div class="btn-group">
+            <a href="{% url 'schedule:week_schedule' year=year month=month week=week %}" class="btn btn-outline-primary">전체</a>
+            {% for department in departments %}
+            <a href="{% url 'schedule:department_schedule' department_id=department.id year=year month=month %}" class="btn btn-outline-{{ department.badge_color|default:'primary' }}">
+                {{ department.name }}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

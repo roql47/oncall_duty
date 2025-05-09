@@ -1,0 +1,374 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load schedule_tags %}
+
+{% block title %}{{ year }}년 {{ month }}월 당직 일정 관리{% endblock %}
+
+{% block styles %}
+<style>
+    .admin-schedule-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+    }
+    
+    .admin-schedule-table th, 
+    .admin-schedule-table td {
+        border: 1px solid #ddd;
+        padding: 6px;
+        text-align: center;
+        vertical-align: middle;
+    }
+    
+    .admin-schedule-table th {
+        background-color: #f2f2f2;
+        font-weight: bold;
+    }
+    
+    .date-header {
+        background-color: #e9ecef;
+        font-weight: bold;
+    }
+    
+    .weekend {
+        background-color: #f8f9fa;
+    }
+    
+    .department-cell {
+        background-color: #e3f2fd;
+        font-weight: bold;
+        width: 150px;
+        text-align: left;
+        padding-left: 10px;
+    }
+    
+    .schedule-cell {
+        padding: 2px;
+        min-width: 150px;
+    }
+    
+    .empty-cell {
+        background-color: #f8f9fa;
+    }
+    
+    .time-slot {
+        margin-bottom: 5px;
+        padding: 4px;
+        border-radius: 4px;
+        background-color: #f0f0f0;
+    }
+    
+    .doctor-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .doctor-select {
+        width: 100%;
+        margin-top: 3px;
+    }
+    
+    .on-call-badge {
+        display: inline-block;
+        padding: 2px 6px;
+        margin-left: 4px;
+        border-radius: 4px;
+        background-color: #dc3545;
+        color: white;
+        font-size: 0.7em;
+    }
+
+    .nav-controls {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    
+    .month-title {
+        font-size: 1.5em;
+        font-weight: bold;
+    }
+    
+    .week-nav button {
+        margin: 0 5px;
+    }
+    
+    .dropdown-select {
+        padding: 4px;
+        border-radius: 4px;
+        border: 1px solid #ccc;
+    }
+    
+    .on-call-toggle {
+        margin-left: 5px;
+        cursor: pointer;
+    }
+    
+    .schedule-row:nth-child(odd) {
+        background-color: #f9f9f9;
+    }
+    
+    .small-text {
+        font-size: 0.85em;
+    }
+    
+    .today {
+        background-color: #fff3cd;
+    }
+    
+    .department-group-header {
+        font-weight: bold;
+        background-color: #4a6da7 !important;
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="nav-controls">
+        <div>
+            <a href="{% url 'schedule:admin_schedule_edit_date' prev_month.year prev_month.month %}" class="btn btn-primary">&laquo; 이전 달</a>
+            <span class="month-title">{{ year }}년 {{ month }}월 당직 일정</span>
+            <a href="{% url 'schedule:admin_schedule_edit_date' next_month.year next_month.month %}" class="btn btn-primary">다음 달 &raquo;</a>
+        </div>
+        <div class="week-nav">
+            <a href="{% url 'schedule:home' %}" class="btn btn-secondary">홈으로</a>
+        </div>
+    </div>
+    
+    <div class="row mb-3">
+        <div class="col-md-12">
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i> 각 셀에서 드롭다운을 선택하여 의사를 배정할 수 있습니다. 변경사항은 자동으로 저장됩니다.
+            </div>
+        </div>
+    </div>
+    
+    <div class="table-responsive">
+        <table class="admin-schedule-table">
+            <thead>
+                <tr>
+                    <th>일정표</th>
+                    {% for weekday_name in weekday_names %}
+                    <th>{{ weekday_name }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                <!-- 각 주를 반복 -->
+                {% for week in calendar_weeks %}
+                <tr>
+                    <td class="date-header">날짜</td>
+                    {% for day in week %}
+                    {% if day %}
+                    <td class="date-header {% if day.weekday == 5 or day.weekday == 6 %}weekend{% endif %}">
+                        {{ day.day }}일 ({{ weekday_names|index:day.weekday }})
+                    </td>
+                    {% else %}
+                    <td class="empty-cell"></td>
+                    {% endif %}
+                    {% endfor %}
+                </tr>
+                
+                <!-- 근무시간별 행 -->
+                {% for work_schedule in work_schedules %}
+                <tr class="schedule-row">
+                    <td class="department-cell">
+                        {{ work_schedule }}
+                    </td>
+                    
+                    {% for day in week %}
+                    {% if day %}
+                    <td class="schedule-cell {% if day.weekday == 5 or day.weekday == 6 %}weekend{% endif %}" 
+                        data-date="{{ day|date:'Y-m-d' }}" 
+                        data-work-schedule="{{ work_schedule.id }}">
+                        
+                        <div class="doctor-info">
+                            <select class="doctor-select form-control form-control-sm" data-date="{{ day|date:'Y-m-d' }}" data-work-schedule="{{ work_schedule.id }}">
+                                <option value="">-- 의사 선택 --</option>
+                                
+                                {% for dept in departments %}
+                                <optgroup label="{{ dept.name }}">
+                                    {% for doctor in doctors %}
+                                    {% if doctor.department.id == dept.id %}
+                                    <option value="{{ doctor.id }}" 
+                                        {% if day in schedule_data and work_schedule.id in schedule_data|lookup:day and schedule_data|lookup:day|lookup:work_schedule.id|lookup:'doctor_id' == doctor.id %}
+                                        selected
+                                        {% endif %}>
+                                        {{ doctor.name }}
+                                    </option>
+                                    {% endif %}
+                                    {% endfor %}
+                                </optgroup>
+                                {% endfor %}
+                            </select>
+                            
+                            <div class="form-check form-check-inline ml-2">
+                                <input type="checkbox" class="form-check-input on-call-toggle" 
+                                      id="onCall-{{ day|date:'Y-m-d' }}-{{ work_schedule.id }}"
+                                      data-date="{{ day|date:'Y-m-d' }}" 
+                                      data-work-schedule="{{ work_schedule.id }}"
+                                      {% if day in schedule_data and work_schedule.id in schedule_data|lookup:day and schedule_data|lookup:day|lookup:work_schedule.id|lookup:'is_on_call' %}
+                                      checked
+                                      {% endif %}>
+                                <label class="form-check-label small-text" for="onCall-{{ day|date:'Y-m-d' }}-{{ work_schedule.id }}">당직</label>
+                            </div>
+                        </div>
+                        
+                        {% if day in schedule_data and work_schedule.id in schedule_data|lookup:day %}
+                        <div class="small-text mt-1 text-muted">
+                            {{ schedule_data|lookup:day|lookup:work_schedule.id|lookup:'department' }}
+                        </div>
+                        {% endif %}
+                        
+                    </td>
+                    {% else %}
+                    <td class="empty-cell"></td>
+                    {% endif %}
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Django 템플릿 필터를 JavaScript로 구현
+    function lookup(obj, key) {
+        return obj[key];
+    }
+    
+    $(document).ready(function() {
+        // 의사 선택 시 이벤트 처리
+        $('.doctor-select').change(function() {
+            const selectElement = $(this);
+            const dateStr = selectElement.data('date');
+            const workScheduleId = selectElement.data('work-schedule');
+            updateSchedule(selectElement[0], dateStr, workScheduleId);
+        });
+        
+        // 당직 체크박스 변경 시 이벤트 처리
+        $('.on-call-toggle').change(function() {
+            const checkbox = $(this);
+            const dateStr = checkbox.data('date');
+            const workScheduleId = checkbox.data('work-schedule');
+            toggleOnCall(checkbox[0], dateStr, workScheduleId);
+        });
+    });
+    
+    function updateSchedule(selectElement, dateStr, workScheduleId) {
+        const doctorId = selectElement.value;
+        const cell = selectElement.closest('.schedule-cell');
+        const onCallCheckbox = document.getElementById(`onCall-${dateStr}-${workScheduleId}`);
+        const isOnCall = onCallCheckbox.checked;
+        
+        if (!doctorId) {
+            // 선택이 취소된 경우 처리
+            return;
+        }
+        
+        // AJAX 요청 보내기
+        $.ajax({
+            url: '{% url "schedule:update_schedule" %}',
+            type: 'POST',
+            data: {
+                'date': dateStr,
+                'work_schedule_id': workScheduleId,
+                'doctor_id': doctorId,
+                'is_on_call': isOnCall,
+                'csrfmiddlewaretoken': '{{ csrf_token }}'
+            },
+            success: function(response) {
+                if (response.status === 'success') {
+                    // 성공 메시지 표시
+                    // 부서 정보 업데이트
+                    let deptInfo = cell.querySelector('.text-muted');
+                    if (!deptInfo) {
+                        deptInfo = document.createElement('div');
+                        deptInfo.className = 'small-text mt-1 text-muted';
+                        cell.appendChild(deptInfo);
+                    }
+                    deptInfo.textContent = response.doctor.department;
+                    
+                    // 성공 시 배경색 변경 후 원래대로
+                    cell.style.backgroundColor = '#d4edda';
+                    setTimeout(() => {
+                        cell.style.backgroundColor = '';
+                    }, 1000);
+                    
+                    console.log(response.message);
+                }
+            },
+            error: function(xhr) {
+                // 에러 메시지 표시
+                let response = xhr.responseJSON;
+                alert(response.message || '오류가 발생했습니다.');
+                
+                // 실패 시 배경색 변경 후 원래대로
+                cell.style.backgroundColor = '#f8d7da';
+                setTimeout(() => {
+                    cell.style.backgroundColor = '';
+                }, 1000);
+            }
+        });
+    }
+    
+    function toggleOnCall(checkbox, dateStr, workScheduleId) {
+        const cell = checkbox.closest('.schedule-cell');
+        const selectElement = cell.querySelector('select');
+        const doctorId = selectElement.value;
+        
+        if (!doctorId) {
+            // 의사가 선택되지 않은 경우
+            checkbox.checked = false;
+            alert('먼저 의사를 선택해주세요.');
+            return;
+        }
+        
+        // AJAX 요청 보내기
+        $.ajax({
+            url: '{% url "schedule:update_schedule" %}',
+            type: 'POST',
+            data: {
+                'date': dateStr,
+                'work_schedule_id': workScheduleId,
+                'doctor_id': doctorId,
+                'is_on_call': checkbox.checked,
+                'csrfmiddlewaretoken': '{{ csrf_token }}'
+            },
+            success: function(response) {
+                if (response.status === 'success') {
+                    // 성공 시 배경색 변경 후 원래대로
+                    cell.style.backgroundColor = '#d4edda';
+                    setTimeout(() => {
+                        cell.style.backgroundColor = '';
+                    }, 1000);
+                    
+                    console.log(response.message);
+                }
+            },
+            error: function(xhr) {
+                // 에러 메시지 표시
+                let response = xhr.responseJSON;
+                alert(response.message || '오류가 발생했습니다.');
+                
+                // 실패 시 체크박스 상태 되돌리기
+                checkbox.checked = !checkbox.checked;
+                
+                // 실패 시 배경색 변경 후 원래대로
+                cell.style.backgroundColor = '#f8d7da';
+                setTimeout(() => {
+                    cell.style.backgroundColor = '';
+                }, 1000);
+            }
+        });
+    }
+</script>
+{% endblock %} 

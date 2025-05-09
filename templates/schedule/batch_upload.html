@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block title %}일정 일괄 업로드 - 당직 스케줄 시스템{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1 class="mb-4">일정 일괄 업로드</h1>
+        
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">입력 형식 안내</h5>
+            </div>
+            <div class="card-body">
+                <p>일정을 일괄 업로드하기 위한 텍스트 형식입니다:</p>
+                <pre class="bg-light p-3">
+부서명 연락처 = 전화번호
+시작시간~종료시간 요일 의사이름
+...
+                </pre>
+                <p>예시:</p>
+                <pre class="bg-light p-3">
+순환기내과 병동 연락처 = 010-9501-9658
+08시~20시 목요일 강해형
+08시~20시 금요일 유수현
+                </pre>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">일정 일괄 입력</h5>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="batch_text" class="form-label">일정 텍스트</label>
+                        <textarea name="batch_text" id="batch_text" rows="10" class="form-control">{{ batch_text|default:'' }}</textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">일정 등록</button>
+                    <a href="{% url 'schedule:home' %}" class="btn btn-outline-secondary">취소</a>
+                </form>
+                
+                {% if results %}
+                <div class="mt-4">
+                    <h5>처리 결과</h5>
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>상태</th>
+                                    <th>메시지</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for result in results %}
+                                <tr>
+                                    <td>
+                                        {% if result.success %}
+                                        <span class="badge bg-success">성공</span>
+                                        {% else %}
+                                        <span class="badge bg-danger">실패</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ result.message }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

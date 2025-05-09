@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ doctor.name }} {{ year }}년 {{ month }}월 당직 일정 - 당직 스케줄 시스템{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1 class="mb-4">{{ doctor.name }} - {{ year }}년 {{ month }}월 일정</h1>
+
+        <div class="mb-3">
+            <a href="{% url 'schedule:department_schedule' department_id=doctor.department.id year=year month=month %}" class="btn btn-outline-secondary me-2">
+                {{ doctor.department.name }} 일정으로
+            </a>
+            
+            {% with prev_month=month|add:"-1" prev_year=year %}
+                {% if prev_month == 0 %}
+                    {% with prev_month=12 prev_year=year|add:"-1" %}
+                        <a href="{% url 'schedule:doctor_schedule' doctor_id=doctor.id year=prev_year month=prev_month %}" class="btn btn-outline-primary me-2">
+                            이전 달
+                        </a>
+                    {% endwith %}
+                {% else %}
+                    <a href="{% url 'schedule:doctor_schedule' doctor_id=doctor.id year=prev_year month=prev_month %}" class="btn btn-outline-primary me-2">
+                        이전 달
+                    </a>
+                {% endif %}
+            {% endwith %}
+            
+            {% with next_month=month|add:"1" next_year=year %}
+                {% if next_month == 13 %}
+                    {% with next_month=1 next_year=year|add:"1" %}
+                        <a href="{% url 'schedule:doctor_schedule' doctor_id=doctor.id year=next_year month=next_month %}" class="btn btn-outline-primary">
+                            다음 달
+                        </a>
+                    {% endwith %}
+                {% else %}
+                    <a href="{% url 'schedule:doctor_schedule' doctor_id=doctor.id year=next_year month=next_month %}" class="btn btn-outline-primary">
+                        다음 달
+                    </a>
+                {% endif %}
+            {% endwith %}
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">의사 정보</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <p><strong>이름:</strong> {{ doctor.name }}</p>
+                        <p><strong>부서:</strong> {{ doctor.department.name }}</p>
+                        <p><strong>연락처:</strong> {{ doctor.phone_number }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">{{ year }}년 {{ month }}월 일정</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="schedule-table">
+                        <thead>
+                            <tr>
+                                <th>날짜</th>
+                                <th>요일</th>
+                                <th>근무시간</th>
+                                <th>당직 여부</th>
+                                <th>비고</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for schedule in schedules %}
+                            <tr class="{% if schedule.date.weekday == 5 or schedule.date.weekday == 6 %}weekend{% endif %} {% if schedule.is_on_call %}on-call{% endif %}">
+                                <td>{{ schedule.date|date:"d" }}</td>
+                                <td>{{ schedule.date|date:"D"|upper }}</td>
+                                <td>{{ schedule.work_schedule }}</td>
+                                <td>
+                                    {% if schedule.is_on_call %}
+                                    <span class="badge bg-danger">당직</span>
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td>{{ schedule.note|default:"-" }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5">등록된 일정이 없습니다.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

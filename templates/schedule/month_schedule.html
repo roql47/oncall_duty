@@ -1,0 +1,537 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ year }}년 {{ month }}월 당직 일정 - 당직 스케줄 시스템{% endblock %}
+
+{% block styles %}
+<style>
+    .schedule-container {
+        overflow-x: auto;
+    }
+    
+    .schedule-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .schedule-table th, .schedule-table td {
+        border: 1px solid #dee2e6;
+        padding: 8px;
+        text-align: center;
+    }
+    
+    .department-col {
+        min-width: 150px;
+    }
+    
+    .date-col {
+        min-width: 100px;
+    }
+    
+    .weekend {
+        background-color: #f8f9fa;
+    }
+    
+    .schedule-item {
+        background-color: #e3f2fd;
+        padding: 5px;
+        margin-bottom: 5px;
+        border-radius: 3px;
+        position: relative;
+    }
+    
+    .admin-controls {
+        display: flex;
+        justify-content: center;
+        margin-top: 5px;
+    }
+    
+    .success-flash {
+        background-color: #d4edda !important;
+        transition: background-color 1s;
+    }
+    
+    .error-flash {
+        background-color: #f8d7da !important;
+        transition: background-color 1s;
+    }
+    
+    .delete-schedule {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        color: #dc3545;
+        cursor: pointer;
+        font-size: 0.8rem;
+    }
+    
+    .delete-schedule:hover {
+        color: #c82333;
+    }
+    
+    .add-schedule-btn {
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        border-radius: 50%;
+    }
+    
+    .mini-modal {
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: white;
+        padding: 12px;
+        border-radius: 5px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+        z-index: 1000;
+        width: 320px;
+        max-width: 95vw;
+        margin-bottom: 8px;
+        border: 1px solid #dee2e6;
+    }
+    
+    .mini-modal:after {
+        content: '';
+        position: absolute;
+        bottom: -8px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 0;
+        height: 0;
+        border-left: 8px solid transparent;
+        border-right: 8px solid transparent;
+        border-top: 8px solid white;
+    }
+    
+    .mini-modal .form-label {
+        font-size: 0.8rem;
+        margin-bottom: 0;
+        color: #666;
+        width: 70px;
+        white-space: nowrap;
+    }
+    
+    .mini-modal .form-select {
+        font-size: 0.85rem;
+        padding: 4px 8px;
+        height: auto;
+    }
+    
+    .mini-modal .btn {
+        font-size: 0.8rem;
+        padding: 3px 8px;
+    }
+    
+    .floating-mini-modal {
+        position: relative;
+    }
+    
+    .form-row {
+        display: flex;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+    
+    .form-select-container {
+        flex: 1;
+    }
+    
+    .btn-row {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 8px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>{{ year }}년 {{ month }}월 당직 일정</h1>
+            <div class="btn-group">
+                <a href="{% url 'schedule:week_schedule' year=year month=month week=1 %}" class="btn btn-outline-primary">
+                    <i class="bi bi-calendar-week"></i> 주간 일정
+                </a>
+                {% if user.is_staff %}
+                <a href="{% url 'schedule:add_schedule' %}" class="btn btn-primary">
+                    <i class="bi bi-plus-circle"></i> 일정 추가
+                </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="mb-3">
+            {% now "Y" as current_year %}
+            {% now "m" as current_month %}
+            
+            {% with prev_month=month|add:"-1" prev_year=year %}
+                {% if prev_month == 0 %}
+                    {% with prev_month=12 prev_year=year|add:"-1" %}
+                        <a href="{% url 'schedule:month_schedule' year=prev_year month=prev_month %}" class="btn btn-outline-primary me-2">
+                            이전 달
+                        </a>
+                    {% endwith %}
+                {% else %}
+                    <a href="{% url 'schedule:month_schedule' year=prev_year month=prev_month %}" class="btn btn-outline-primary me-2">
+                        이전 달
+                    </a>
+                {% endif %}
+            {% endwith %}
+            
+            {% with next_month=month|add:"1" next_year=year %}
+                {% if next_month == 13 %}
+                    {% with next_month=1 next_year=year|add:"1" %}
+                        <a href="{% url 'schedule:month_schedule' year=next_year month=next_month %}" class="btn btn-outline-primary">
+                            다음 달
+                        </a>
+                    {% endwith %}
+                {% else %}
+                    <a href="{% url 'schedule:month_schedule' year=next_year month=next_month %}" class="btn btn-outline-primary">
+                        다음 달
+                    </a>
+                {% endif %}
+            {% endwith %}
+            
+            <div class="btn-group ms-2">
+                <a href="{% url 'schedule:week_schedule' year=year month=month week=1 %}" class="btn btn-outline-secondary">1주</a>
+                <a href="{% url 'schedule:week_schedule' year=year month=month week=2 %}" class="btn btn-outline-secondary">2주</a>
+                <a href="{% url 'schedule:week_schedule' year=year month=month week=3 %}" class="btn btn-outline-secondary">3주</a>
+                <a href="{% url 'schedule:week_schedule' year=year month=month week=4 %}" class="btn btn-outline-secondary">4주</a>
+                {% if month == 1 or month == 3 or month == 5 or month == 7 or month == 8 or month == 10 or month == 12 %}
+                <a href="{% url 'schedule:week_schedule' year=year month=month week=5 %}" class="btn btn-outline-secondary">5주</a>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if user.is_staff %}
+        <div class="alert alert-info mb-3">
+            <i class="bi bi-info-circle"></i> 관리자님, 각 칸에서 + 버튼을 클릭하여 일정을 추가하거나 기존 스케줄의 삭제 아이콘(×)을 클릭하여 삭제할 수 있습니다.
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">일정 표</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="schedule-container">
+                    <table class="schedule-table">
+                        <thead>
+                            <tr>
+                                <th class="bg-light department-col">부서/날짜</th>
+                                {% for date, schedules in schedules_by_date.items %}
+                                <th class="{% if date.weekday == 5 or date.weekday == 6 %}weekend{% endif %} date-col">
+                                    {{ date|date:"d" }}({{ date|date:"D"|upper }})
+                                </th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for department in departments %}
+                            <tr>
+                                <th class="bg-light department-col">{{ department.name }}</th>
+                                {% for date, schedules in schedules_by_date.items %}
+                                <td class="{% if date.weekday == 5 or date.weekday == 6 %}weekend{% endif %} schedule-cell" 
+                                    data-date="{{ date|date:'Y-m-d' }}" 
+                                    data-department="{{ department.id }}">
+                                    
+                                    {% regroup schedules|dictsort:"work_schedule.start_time" by work_schedule as work_schedule_list %}
+                                    {% for work_schedule_group in work_schedule_list %}
+                                        {% for schedule in work_schedule_group.list %}
+                                            {% if schedule.doctor.department.id == department.id %}
+                                                <div class="schedule-item" 
+                                                     id="schedule-{{ schedule.id }}"
+                                                     data-schedule-id="{{ schedule.id }}"
+                                                     data-work-schedule="{{ schedule.work_schedule.id }}"
+                                                     data-doctor="{{ schedule.doctor.id }}">
+                                                    {% if user.is_staff %}
+                                                    <span class="delete-schedule" title="삭제">×</span>
+                                                    {% endif %}
+                                                    <strong>{{ work_schedule_group.grouper }}</strong><br>
+                                                    <span class="doctor-name">{{ schedule.doctor.name }}</span>
+                                                    <small class="d-block text-muted phone-number">{{ schedule.doctor.phone_number }}</small>
+                                                </div>
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% endfor %}
+                                    
+                                    {% if user.is_staff %}
+                                    <div class="admin-controls">
+                                        <button class="btn btn-sm btn-outline-primary add-schedule-btn" title="스케줄 추가">
+                                            <i class="bi bi-plus"></i>
+                                        </button>
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="{{ schedules_by_date.keys|length|add:1 }}">등록된 부서가 없습니다.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 미니 모달 템플릿 (동적으로 추가됨) -->
+<div id="miniModalTemplate" style="display: none;">
+    <div class="mini-modal">
+        <div class="form-row">
+            <label class="form-label">근무시간:</label>
+            <div class="form-select-container">
+                <select class="form-select form-select-sm work-schedule-select">
+                    <option value="">-- 선택 --</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <label class="form-label">의사:</label>
+            <div class="form-select-container">
+                <select class="form-select form-select-sm doctor-select">
+                    <option value="">-- 선택 --</option>
+                </select>
+            </div>
+        </div>
+        <div class="btn-row">
+            <button class="btn btn-sm btn-secondary me-2 cancel-mini-modal">취소</button>
+            <button class="btn btn-sm btn-primary save-schedule">저장</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if user.is_staff %}
+<script>
+    $(document).ready(function() {
+        console.log("스케줄 페이지 로드됨");
+        
+        // 전역 변수로 워크스케줄 데이터 저장
+        let allWorkSchedules = [];
+        
+        // 초기에 근무시간 데이터 로드
+        $.ajax({
+            url: '{% url "schedule:get_work_schedules" %}',
+            type: 'GET',
+            success: function(data) {
+                allWorkSchedules = data.work_schedules;
+            },
+            error: function() {
+                console.error('근무시간 데이터를 불러오는데 실패했습니다.');
+            }
+        });
+        
+        // 스케줄 추가 버튼 클릭 시
+        $(document).on('click', '.add-schedule-btn', function() {
+            console.log("더하기 버튼 클릭됨");
+            
+            // 모든 열린 미니 모달 닫기
+            $('.floating-mini-modal').remove();
+            
+            const cell = $(this).closest('.schedule-cell');
+            const dateStr = cell.data('date');
+            const departmentId = cell.data('department');
+            
+            // 미니 모달 템플릿 복제하고 준비
+            const modalContent = $('#miniModalTemplate').html();
+            const floatingModal = $('<div class="floating-mini-modal"></div>').html(modalContent);
+            
+            // 모달을 버튼 위에 추가
+            $(this).closest('.admin-controls').prepend(floatingModal);
+            
+            // 모달 데이터 설정
+            const $modal = floatingModal;
+            $modal.find('.mini-modal').data('date', dateStr);
+            $modal.find('.mini-modal').data('department', departmentId);
+            
+            // 근무시간 옵션 로딩
+            const $workScheduleSelect = $modal.find('.work-schedule-select');
+            $workScheduleSelect.empty().append('<option value="">-- 선택 --</option>');
+            
+            allWorkSchedules.forEach(function(ws) {
+                $workScheduleSelect.append(`<option value="${ws.id}" data-display="${ws.display}">${ws.display}</option>`);
+            });
+            
+            // 의사 목록 로딩
+            $.ajax({
+                url: '{% url "schedule:get_doctors_by_department" %}',
+                type: 'GET',
+                data: {
+                    'department_id': departmentId
+                },
+                success: function(data) {
+                    const $doctorSelect = $modal.find('.doctor-select');
+                    $doctorSelect.empty().append('<option value="">-- 선택 --</option>');
+                    
+                    data.doctors.forEach(function(doctor) {
+                        $doctorSelect.append(`<option value="${doctor.id}">${doctor.name}</option>`);
+                    });
+                },
+                error: function() {
+                    alert('의사 목록을 불러오는 중 오류가 발생했습니다.');
+                    floatingModal.remove();
+                }
+            });
+            
+            // 배경 클릭 시 닫기 이벤트 위임
+            $(document).on('click', function(e) {
+                if (!$(e.target).closest('.floating-mini-modal').length && 
+                    !$(e.target).hasClass('add-schedule-btn') && 
+                    !$(e.target).closest('.add-schedule-btn').length) {
+                    $('.floating-mini-modal').remove();
+                    // 이벤트 핸들러 제거
+                    $(document).off('click.closeModal');
+                }
+            });
+            
+            // 이벤트 핸들러에 네임스페이스 지정
+            $(document).on('click.closeModal');
+            
+            // 취소 버튼 클릭 시
+            $modal.find('.cancel-mini-modal').on('click', function(e) {
+                e.stopPropagation();
+                floatingModal.remove();
+                // 이벤트 핸들러 제거
+                $(document).off('click.closeModal');
+            });
+            
+            // 저장 버튼 클릭 시
+            $modal.find('.save-schedule').on('click', function(e) {
+                e.stopPropagation();
+                const workScheduleId = $modal.find('.work-schedule-select').val();
+                const doctorId = $modal.find('.doctor-select').val();
+                
+                if (!workScheduleId || !doctorId) {
+                    alert('근무시간과 의사를 모두 선택해주세요.');
+                    return;
+                }
+                
+                updateSchedule(cell, dateStr, workScheduleId, doctorId);
+                floatingModal.remove();
+                // 이벤트 핸들러 제거
+                $(document).off('click.closeModal');
+            });
+            
+            // 이벤트 버블링 방지
+            floatingModal.on('click', function(e) {
+                e.stopPropagation();
+            });
+        });
+        
+        // 삭제 아이콘 클릭 시
+        $(document).on('click', '.delete-schedule', function(e) {
+            e.stopPropagation();
+            if (confirm('이 스케줄을 삭제하시겠습니까?')) {
+                const scheduleItem = $(this).closest('.schedule-item');
+                const scheduleId = scheduleItem.data('schedule-id');
+                
+                deleteSchedule(scheduleId, scheduleItem);
+            }
+        });
+        
+        // 스케줄 업데이트 함수
+        function updateSchedule(cell, dateStr, workScheduleId, doctorId) {
+            $.ajax({
+                url: '{% url "schedule:update_month_schedule" %}',
+                type: 'POST',
+                data: {
+                    'date': dateStr,
+                    'work_schedule_id': workScheduleId,
+                    'doctor_id': doctorId,
+                    'is_on_call': false,
+                    'csrfmiddlewaretoken': '{{ csrf_token }}'
+                },
+                success: function(response) {
+                    if (response.status === 'success') {
+                        // 해당 날짜의 근무시간에 맞는 스케줄 요소 찾기 또는 생성
+                        let scheduleItem = cell.find(`[data-work-schedule="${workScheduleId}"]`);
+                        
+                        // 선택한 근무시간의 텍스트 가져오기
+                        let workScheduleText = '';
+                        for (let i = 0; i < allWorkSchedules.length; i++) {
+                            if (allWorkSchedules[i].id == workScheduleId) {
+                                workScheduleText = allWorkSchedules[i].display;
+                                break;
+                            }
+                        }
+                        
+                        if (scheduleItem.length === 0) {
+                            // 새로운 스케줄 요소 생성
+                            scheduleItem = $('<div>')
+                                .addClass('schedule-item')
+                                .attr('data-schedule-id', response.schedule_id)
+                                .attr('data-work-schedule', workScheduleId)
+                                .attr('data-doctor', doctorId)
+                                .html(`<span class="delete-schedule" title="삭제">×</span>
+                                      <strong>${workScheduleText}</strong><br>
+                                      <span class="doctor-name">${response.doctor.name}</span>
+                                      <small class="d-block text-muted phone-number">${response.doctor.phone_number}</small>`);
+                            
+                            // 관리자 컨트롤 요소 앞에 삽입
+                            cell.find('.admin-controls').before(scheduleItem);
+                        } else {
+                            // 기존 스케줄 요소 업데이트
+                            scheduleItem.attr('data-doctor', doctorId);
+                            scheduleItem.find('strong').text(workScheduleText);
+                            scheduleItem.find('.doctor-name').text(response.doctor.name);
+                            scheduleItem.find('.phone-number').text(response.doctor.phone_number);
+                        }
+                        
+                        // 셀에 성공 표시 애니메이션
+                        cell.addClass('success-flash');
+                        setTimeout(() => {
+                            cell.removeClass('success-flash');
+                        }, 1000);
+                    }
+                },
+                error: function(xhr) {
+                    const response = xhr.responseJSON;
+                    alert(response.message || '오류가 발생했습니다.');
+                    
+                    // 셀에 에러 표시 애니메이션
+                    cell.addClass('error-flash');
+                    setTimeout(() => {
+                        cell.removeClass('error-flash');
+                    }, 1000);
+                }
+            });
+        }
+        
+        // 스케줄 삭제 함수
+        function deleteSchedule(scheduleId, scheduleItem) {
+            $.ajax({
+                url: '{% url "schedule:delete_schedule" %}',
+                type: 'POST',
+                data: {
+                    'schedule_id': scheduleId,
+                    'csrfmiddlewaretoken': '{{ csrf_token }}'
+                },
+                success: function(response) {
+                    if (response.status === 'success') {
+                        // 스케줄 항목 제거
+                        scheduleItem.fadeOut(300, function() {
+                            $(this).remove();
+                        });
+                    }
+                },
+                error: function(xhr) {
+                    const response = xhr.responseJSON;
+                    alert(response.message || '삭제 중 오류가 발생했습니다.');
+                }
+            });
+        }
+    });
+</script>
+{% endif %}
+{% endblock %} 
