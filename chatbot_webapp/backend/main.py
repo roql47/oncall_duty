@@ -257,6 +257,7 @@ def parse_date_reference(message: str):
     
     # '어제', '오늘', '내일' 키워드 처리
     if "어제" in message:
+        # '어제' 키워드가 있으면 다른 날짜 정보는 무시하고 어제 날짜 반환
         return yesterday.strftime('%Y-%m-%d')
     elif "내일" in message:
         return tomorrow.strftime('%Y-%m-%d')
@@ -322,10 +323,33 @@ async def extract_entities(message: str):
     """사용자 메시지에서 주요 엔티티 추출"""
     entities = {}
     
-    # 날짜 추출
+    # 구체적인 시간 추출 (HH시, H시, 오전/오후 H시 등) - 날짜 전에 시간 추출
+    time_pattern = re.search(r'(\d{1,2})(?:시|:00|:30|시\s?(?:반|정각)?)', message)
+    if time_pattern:
+        hour = int(time_pattern.group(1))
+        # 12시간제 처리 (오후 2시 → 14시)
+        if '오후' in message and hour < 12:
+            hour += 12
+        elif '아침' in message and hour >= 12:
+            hour = hour % 12
+        
+        # 시간을 24시간제로 저장
+        entities["specific_hour"] = hour
+        print(f"특정 시간 추출됨: {hour}시")
+    
+    # 날짜 추출 - 시간 추출 후에 처리
     date = parse_date_reference(message)
     if date:
         entities["date"] = date
+        
+        # 새벽 시간대(0-8시)이고 '어제' 키워드가 없는 경우에 날짜 조정
+        if "specific_hour" in entities and 0 <= entities["specific_hour"] < 8 and "어제" not in message:
+            # 날짜 객체로 변환
+            original_date = datetime.strptime(entities["date"], '%Y-%m-%d')
+            # 이전 날짜로 설정
+            adjusted_date = original_date - timedelta(days=1)
+            entities["date"] = adjusted_date.strftime('%Y-%m-%d')
+            print(f"새벽 시간대로 날짜 조정: {entities['date']}")
     
     # 날짜 묻는 질문인지 확인
     if re.search(r"(오늘|지금).*(날짜|몇월\s*몇일)", message):
@@ -351,20 +375,6 @@ async def extract_entities(message: str):
     if matched_dept:
         entities["department"] = matched_dept
         print(f"부서 매칭: '{matched_dept}'")
-    
-    # 구체적인 시간 추출 (HH시, H시, 오전/오후 H시 등)
-    time_pattern = re.search(r'(\d{1,2})(?:시|:00|:30|시\s?(?:반|정각)?)', message)
-    if time_pattern:
-        hour = int(time_pattern.group(1))
-        # 12시간제 처리 (오후 2시 → 14시)
-        if '오후' in message and hour < 12:
-            hour += 12
-        elif '아침' in message and hour >= 12:
-            hour = hour % 12
-        
-        # 시간을 24시간제로 저장
-        entities["specific_hour"] = hour
-        print(f"특정 시간 추출됨: {hour}시")
     
     # 시간대 추출 (아침, 오전, 오후, 저녁, 야간 등)
     time_keywords = {
@@ -457,15 +467,31 @@ def get_schedule_from_db(date_str, dept_name, role_name=None, time_range=None, n
     
     print(f"조회 기준: 날짜={date_str}, 부서={dept_name}, 역할={role_name}, 시간대={time_range}, 특정시간={specific_hour}")
     
-    # 스케줄 목록 가져오기
-    all_schedules = list(query.all())
+    # 특정 시간이 새벽 시간대(0-8시)인 경우, 전날 당직도 함께 검색
+    if specific_hour is not None and 0 <= specific_hour < 8:
+        # 전날 날짜 계산
+        previous_date = (datetime.strptime(date_str, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
+        print(f"새벽 시간대({specific_hour}시)이므로 전날({previous_date})의 당직도 검색합니다")
+        
+        # 전날 쿼리도 추가
+        previous_day_query = Schedule.objects.filter(
+            date=previous_date,
+            doctor__department__name=dept_name
+        ).select_related('doctor', 'work_schedule')
+        
+        # 전날 및 당일 스케줄 모두 가져오기
+        all_schedules = list(previous_day_query.all()) + list(query.all())
+    else:
+        # 스케줄 목록 가져오기
+        all_schedules = list(query.all())
+    
     if not all_schedules:
         print(f"해당 날짜/부서에 스케줄이 없습니다: {date_str}, {dept_name}")
         return None
     
     # 디버깅: 모든 스케줄 출력
     for i, schedule in enumerate(all_schedules):
-        print(f"  스케줄 {i+1}: {schedule.work_schedule}, {schedule.doctor.name}")
+        print(f"  스케줄 {i+1}: {schedule.work_schedule}, {schedule.doctor.name}, 날짜={schedule.date}")
     
     # 시간이 특정되지 않고 역할도 지정되지 않은 경우 모든 스케줄 반환
     if specific_hour is None and role_name is None and time_range is None:
@@ -475,6 +501,8 @@ def get_schedule_from_db(date_str, dept_name, role_name=None, time_range=None, n
     # 특정 시간이 지정된 경우 (가장 우선)
     if specific_hour is not None:
         matching_schedules = []
+        overnight_schedules = []  # 야간 근무(익일 새벽까지) 스케줄
+        
         for schedule in all_schedules:
             try:
                 # work_schedule 문자열에서 시간 추출 (예: "08:00 - 16:00")
@@ -483,18 +511,40 @@ def get_schedule_from_db(date_str, dept_name, role_name=None, time_range=None, n
                     start_hour = int(times[0].split(':')[0])
                     end_hour = int(times[1].split(':')[0])
                     
-                    # 경계 처리: 종료 시간이 시작 시간보다 작으면 다음 날
-                    if end_hour < start_hour:
+                    # 시작 시간이 종료 시간과 같거나 더 클 경우 익일로 처리
+                    if end_hour <= start_hour:
+                        # 새벽 시간대(0-8시)에 대한 질의인 경우, 전날의 당직을 찾습니다
+                        if 0 <= specific_hour < 8:
+                            # 전날이면서 야간 근무인 경우에만 저장
+                            schedule_date = schedule.date.strftime('%Y-%m-%d')
+                            query_date = datetime.strptime(date_str, '%Y-%m-%d')
+                            schedule_datetime = datetime.strptime(schedule_date, '%Y-%m-%d')
+                            
+                            # 전날 스케줄이면서 야간 근무인 경우
+                            if schedule_datetime.date() < query_date.date() and end_hour <= start_hour:
+                                overnight_schedules.append(schedule)
+                                print(f"    ✓ 전날 야간 근무 일치: {schedule.work_schedule}, {schedule.date}")
+                        
                         end_hour += 24
                     
                     print(f"    시간 비교: {start_hour} <= {specific_hour} < {end_hour}")
                     # 특정 시간이 시작 시간과 종료 시간 사이에 있는지 확인
-                    if start_hour <= specific_hour < end_hour:
+                    # specific_hour가 24 이상인 경우(익일 새벽)도 처리
+                    specific_hour_normalized = specific_hour
+                    if specific_hour < 12 and start_hour > 12:
+                        specific_hour_normalized = specific_hour + 24
+                        
+                    if start_hour <= specific_hour_normalized < end_hour:
                         matching_schedules.append(schedule)
-                        print(f"    ✓ 시간 일치: {schedule.work_schedule}")
+                        print(f"    ✓ 시간 일치: {schedule.work_schedule}, {schedule.date}")
             except Exception as e:
                 print(f"    시간 파싱 오류: {e}")
                 continue
+        
+        # 새벽 시간대(0-8시)에 대한 질의일 경우 전날 당직을 우선 반환
+        if 0 <= specific_hour < 8 and overnight_schedules:
+            print(f"    새벽 시간대({specific_hour}시)에 대한 질의로 전날 당직을 우선 반환합니다.")
+            return overnight_schedules[0]
         
         if matching_schedules:
             return matching_schedules[0]
@@ -521,11 +571,16 @@ def get_schedule_from_db(date_str, dept_name, role_name=None, time_range=None, n
                         start_hour = int(times[0].split(':')[0])
                         end_hour = int(times[1].split(':')[0])
                         
-                        # 경계 처리
-                        if end_hour < start_hour:
+                        # 시작 시간이 종료 시간과 같거나 더 클 경우 익일로 처리
+                        if end_hour <= start_hour:
                             end_hour += 24
+                        
+                        # specific_hour 정규화 (익일 새벽 시간 처리)
+                        specific_hour_normalized = current_hour
+                        if current_hour < 12 and start_hour > 12:
+                            specific_hour_normalized = current_hour + 24
                             
-                        if start_hour <= current_hour < end_hour:
+                        if start_hour <= specific_hour_normalized < end_hour:
                             return schedule
                     except:
                         continue
@@ -561,11 +616,16 @@ def get_schedule_from_db(date_str, dept_name, role_name=None, time_range=None, n
                 start_hour = int(start_time.split(':')[0])
                 end_hour = int(end_time.split(':')[0])
                 
-                # 경계 처리
-                if end_hour < start_hour:
+                # 시작 시간이 종료 시간과 같거나 더 클 경우 익일로 처리
+                if end_hour <= start_hour:
                     end_hour += 24
                 
-                if start_hour <= current_hour < end_hour:
+                # current_hour 정규화 (익일 새벽 시간 처리)
+                current_hour_normalized = current_hour
+                if current_hour < 12 and start_hour > 12:
+                    current_hour_normalized = current_hour + 24
+                    
+                if start_hour <= current_hour_normalized < end_hour:
                     return schedule
             except:
                 continue
@@ -595,6 +655,9 @@ async def chat(req: ChatRequest):
         try:
             entities = await extract_entities(message)
             print(f"추출된 엔티티: {entities}")
+            
+            # 이미 extract_entities에서 날짜 조정을 완료했으므로 여기서는 제거
+            
         except Exception as e:
             print(f"엔티티 추출 오류: {e}")
             return {"answer": f"엔티티 추출 중 오류가 발생했습니다: {str(e)}"}
@@ -653,13 +716,13 @@ async def chat(req: ChatRequest):
                                                 key=lambda s: int(str(s.work_schedule).split(' - ')[0].split(':')[0]))
                         
                         if "phone_requested" in entities:
-                            schedule_info = [f"{str(s.work_schedule)}: {s.doctor.name} (연락처: {s.doctor.phone_number})" 
-                                            for s in sorted_schedules]
+                            schedule_info = [f"• {str(s.work_schedule)}: {s.doctor.name} (연락처: {s.doctor.phone_number})" 
+                                           for s in sorted_schedules]
                         else:
-                            schedule_info = [f"{str(s.work_schedule)}: {s.doctor.name}" 
-                                            for s in sorted_schedules]
+                            schedule_info = [f"• {str(s.work_schedule)}: {s.doctor.name}" 
+                                           for s in sorted_schedules]
                         
-                        response = f"{date_str} {dept_name} 당직표:\n" + "\n".join(schedule_info)
+                        response = f"[{date_str}] {dept_name} 당직표:\n\n" + "\n".join(schedule_info)
                         print(f"응답: {response}")
                         return {"answer": response}
                     # 단일 스케줄 반환인 경우
@@ -671,9 +734,9 @@ async def chat(req: ChatRequest):
                             
                         print(f"DB 직접 조회 성공: {schedule.date} - {schedule.doctor.name}, 시간={schedule.work_schedule}")
                         if "phone_requested" in entities:
-                            response = f"{date_str} {dept_name} {str(schedule.work_schedule)}의 연락처는 {schedule.doctor.name} {schedule.doctor.phone_number}입니다."
+                            response = f"[{date_str}] {dept_name} {str(schedule.work_schedule)}의 연락처는 {schedule.doctor.name} {schedule.doctor.phone_number}입니다."
                         else:
-                            response = f"{date_str} {dept_name} {str(schedule.work_schedule)}는 {schedule.doctor.name}입니다."
+                            response = f"[{date_str}] {dept_name} {str(schedule.work_schedule)}는 {schedule.doctor.name}입니다."
                         
                         print(f"응답: {response}")
                         return {"answer": response}
@@ -725,11 +788,11 @@ async def chat(req: ChatRequest):
                             matching_schedules.sort(key=lambda m: int(m['role'].split(' - ')[0].split(':')[0]))
                             
                             if "phone_requested" in entities:
-                                schedule_info = [f"{m['role']}: {m['name']} (연락처: {m['phone']})" for m in matching_schedules]
+                                schedule_info = [f"• {m['role']}: {m['name']} (연락처: {m['phone']})" for m in matching_schedules]
                             else:
-                                schedule_info = [f"{m['role']}: {m['name']}" for m in matching_schedules]
+                                schedule_info = [f"• {m['role']}: {m['name']}" for m in matching_schedules]
                             
-                            response = f"{entities['date']} {entities['department']} 당직표:\n" + "\n".join(schedule_info)
+                            response = f"[{entities['date']}] {entities['department']} 당직표:\n\n" + "\n".join(schedule_info)
                             print(f"응답: {response}")
                             return {"answer": response}
                     
@@ -791,19 +854,24 @@ async def chat(req: ChatRequest):
                                         start_hour = int(times[0].split(':')[0])
                                         end_hour = int(times[1].split(':')[0])
                                         
-                                        # 경계 처리
-                                        if end_hour < start_hour:
+                                        # 시작 시간이 종료 시간과 같거나 더 클 경우 익일로 처리
+                                        if end_hour <= start_hour:
                                             end_hour += 24
                                         
-                                        current_time_match = start_hour <= specific_hour < end_hour
+                                        # specific_hour 정규화 (익일 새벽 시간 처리)
+                                        specific_hour_normalized = specific_hour
+                                        if specific_hour < 12 and start_hour > 12:
+                                            specific_hour_normalized = specific_hour + 24
+                                            
+                                        current_time_match = start_hour <= specific_hour_normalized < end_hour
                                 except:
                                     current_time_match = True  # 파싱 실패 시 기본값
                             
                             if current_time_match or specific_hour is None:
                                 if "phone_requested" in entities:
-                                    response = f"{date_str} {dept_name} {str(schedule.work_schedule)}의 연락처는 {schedule.doctor.name} {schedule.doctor.phone_number}입니다."
+                                    response = f"[{date_str}] {dept_name} {str(schedule.work_schedule)}의 연락처는 {schedule.doctor.name} {schedule.doctor.phone_number}입니다."
                                 else:
-                                    response = f"{date_str} {dept_name} {str(schedule.work_schedule)}는 {schedule.doctor.name}입니다."
+                                    response = f"[{date_str}] {dept_name} {str(schedule.work_schedule)}는 {schedule.doctor.name}입니다."
                                 
                                 print(f"응답: {response}")
                                 return {"answer": response}
@@ -830,9 +898,9 @@ async def chat(req: ChatRequest):
                             response = f"{entities['department']}의 당직 정보를 찾을 수 없습니다."
                         else:
                             if "phone_requested" in entities:
-                                response = f"{best_match['date']} {best_match['department']} {best_match['role']}의 연락처는 {best_match['name']} {best_match['phone']}입니다."
+                                response = f"[{best_match['date']}] {best_match['department']} {best_match['role']}의 연락처는 {best_match['name']} {best_match['phone']}입니다."
                             else:
-                                response = f"{best_match['date']} {best_match['department']} {best_match['role']}는 {best_match['name']}입니다."
+                                response = f"[{best_match['date']}] {best_match['department']} {best_match['role']}는 {best_match['name']}입니다."
                     else:
                         response = "죄송합니다. 질문에 맞는 당직 정보를 찾을 수 없습니다."
                 else:

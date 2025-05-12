@@ -38,8 +38,15 @@ class ScheduleAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
 
 class WorkScheduleAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'description')
+    list_display = ('__str__', 'description', 'display_departments')
     search_fields = ('start_time', 'end_time', 'description')
+    list_filter = ('departments',)
+    filter_horizontal = ('departments',)
+    
+    def display_departments(self, obj):
+        return ", ".join([dept.name for dept in obj.departments.all()])
+    
+    display_departments.short_description = '부서'
 
 admin.site.register(Department, DepartmentAdmin)
 admin.site.register(Doctor, DoctorAdmin)

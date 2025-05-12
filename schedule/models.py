@@ -71,6 +71,7 @@ class WorkSchedule(models.Model):
     start_time = models.CharField(max_length=10, verbose_name='시작 시간', choices=TIME_CHOICES)
     end_time = models.CharField(max_length=10, verbose_name='종료 시간', choices=TIME_CHOICES)
     description = models.CharField(max_length=100, blank=True, null=True, verbose_name='설명')
+    departments = models.ManyToManyField(Department, blank=True, related_name='work_schedules', verbose_name='부서')
     
     def __str__(self):
         if self.description:

@@ -5,27 +5,71 @@
 
 {% block styles %}
 <style>
+    body {
+        overflow-x: hidden;
+    }
+    
+    .card {
+        overflow: hidden;
+    }
+    
     .schedule-container {
         overflow-x: auto;
+        width: 100%;
+        border: 1px solid #dee2e6;
+        margin-bottom: 20px;
+        -webkit-overflow-scrolling: touch;
     }
     
     .schedule-table {
-        width: 100%;
+        table-layout: fixed;
         border-collapse: collapse;
+        width: auto;
+        min-width: 2500px;
     }
     
     .schedule-table th, .schedule-table td {
         border: 1px solid #dee2e6;
-        padding: 8px;
+        padding: 12px 10px;
         text-align: center;
+        white-space: nowrap;
     }
     
     .department-col {
         min-width: 150px;
+        position: sticky;
+        left: 0;
+        background-color: #f8f9fa;
+        z-index: 1;
+        box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1);
     }
     
     .date-col {
-        min-width: 100px;
+        min-width: 180px;
+    }
+    
+    /* 스크롤바 스타일 커스터마이징 */
+    .schedule-container::-webkit-scrollbar {
+        height: 12px;
+    }
+    
+    .schedule-container::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 6px;
+    }
+    
+    .schedule-container::-webkit-scrollbar-thumb {
+        background: #b4c0cc;
+        border-radius: 6px;
+    }
+    
+    .schedule-container::-webkit-scrollbar-thumb:hover {
+        background: #8a98a8;
+    }
+    
+    /* 스크롤 안내 표시 */
+    .scroll-indicator {
+        display: none;
     }
     
     .weekend {
@@ -146,6 +190,66 @@
         justify-content: flex-end;
         margin-top: 8px;
     }
+    
+    /* 필터링 옵션 스타일 */
+    .filter-options {
+        padding: 8px 0;
+        border-top: 1px solid #eee;
+        margin-top: 10px;
+    }
+    
+    .form-check-inline {
+        margin-right: 15px;
+    }
+    
+    .form-check-input {
+        cursor: pointer;
+    }
+    
+    .form-check-label {
+        font-size: 0.9rem;
+        cursor: pointer;
+    }
+    
+    /* 스케줄 아이템 구조 */
+    .schedule-item {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 5px;
+    }
+    
+    .time-info {
+        flex: 0 0 auto;
+        font-weight: bold;
+    }
+    
+    .doctor-info {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .doctor-name {
+        display: block;
+    }
+    
+    .contact-info {
+        display: block;
+        font-size: 0.8em;
+        color: #666;
+    }
+    
+    .phone-number {
+        font-size: 0.8em;
+    }
+    
+    /* 스케줄 셀 스타일 추가 */
+    .schedule-cell {
+        min-width: 180px;
+        white-space: normal;
+        padding: 8px;
+    }
 </style>
 {% endblock %}
 
@@ -218,6 +322,24 @@
         <div class="card">
             <div class="card-header">
                 <h5 class="mb-0">일정 표</h5>
+                <div class="filter-options mt-2">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="show-work-time" checked>
+                        <label class="form-check-label" for="show-work-time">근무시간</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="show-doctor-name" checked>
+                        <label class="form-check-label" for="show-doctor-name">의사 이름</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="show-phone-number" checked>
+                        <label class="form-check-label" for="show-phone-number">연락처</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="show-all-days">
+                        <label class="form-check-label" for="show-all-days">전체 스케줄 표시 (스크롤 없이)</label>
+                    </div>
+                </div>
             </div>
             <div class="card-body p-0">
                 <div class="schedule-container">
@@ -253,9 +375,13 @@
                                                     {% if user.is_staff %}
                                                     <span class="delete-schedule" title="삭제">×</span>
                                                     {% endif %}
-                                                    <strong>{{ work_schedule_group.grouper }}</strong><br>
-                                                    <span class="doctor-name">{{ schedule.doctor.name }}</span>
-                                                    <small class="d-block text-muted phone-number">{{ schedule.doctor.phone_number }}</small>
+                                                    <div class="time-info">
+                                                        <strong>{{ work_schedule_group.grouper }}</strong>
+                                                    </div>
+                                                    <div class="doctor-info">
+                                                        <span class="doctor-name">{{ schedule.doctor.name }}</span>
+                                                        <span class="contact-info d-block text-muted phone-number">{{ schedule.doctor.phone_number }}</span>
+                                                    </div>
                                                 </div>
                                             {% endif %}
                                         {% endfor %}
@@ -317,6 +443,95 @@
     $(document).ready(function() {
         console.log("스케줄 페이지 로드됨");
         
+        // 필터링 체크박스 이벤트 처리
+        $('#show-work-time').change(function() {
+            if($(this).is(':checked')) {
+                $('.time-info').show();
+            } else {
+                $('.time-info').hide();
+            }
+        });
+        
+        $('#show-doctor-name').change(function() {
+            if($(this).is(':checked')) {
+                $('.doctor-name').show();
+            } else {
+                $('.doctor-name').hide();
+            }
+        });
+        
+        $('#show-phone-number').change(function() {
+            // 연락처 표시/숨김 개선
+            if($(this).is(':checked')) {
+                $('.phone-number').show();
+            } else {
+                $('.phone-number').hide();
+            }
+            
+            // 디버깅용 로그
+            console.log('연락처 표시/숨김 변경:', $(this).is(':checked'), 
+                '/ 요소 상태:', $('.phone-number:visible').length + '개 표시, ' +
+                $('.phone-number:hidden').length + '개 숨김');
+        });
+        
+        // 초기 체크박스 상태에 따라 필터링 적용
+        $('#show-work-time').trigger('change');
+        $('#show-doctor-name').trigger('change');
+        $('#show-phone-number').trigger('change');
+        
+        // 전체 스케줄 표시 옵션 처리
+        $('#show-all-days').change(function() {
+            if($(this).is(':checked')) {
+                // 스크롤 없이 전체 표시
+                $('.schedule-container').css({
+                    'overflow-x': 'visible',
+                    'max-width': 'none'
+                });
+                $('.schedule-table').css({
+                    'min-width': '100%',
+                    'width': '100%'
+                });
+                
+                // 셀 너비 조정
+                adjustCellWidths();
+            } else {
+                // 원래대로 스크롤 표시
+                $('.schedule-container').css({
+                    'overflow-x': 'auto',
+                    'max-width': '100%'
+                });
+                $('.schedule-table').css({
+                    'min-width': '2500px',
+                    'width': 'auto'
+                });
+                
+                // 셀 너비 원복
+                resetCellWidths();
+            }
+        });
+        
+        // 페이지 로드 시 show-all-days 체크박스 상태 적용
+        $('#show-all-days').trigger('change');
+        
+        // 셀 너비 조정 함수
+        function adjustCellWidths() {
+            // 날짜 셀 수 계산
+            const numDays = $('.date-col').length;
+            if(numDays > 0) {
+                // 전체 너비에서 부서 컬럼 너비를 뺀 값을 날짜 수로 나눔
+                const availableWidth = $('.schedule-container').width() - 150;
+                const cellWidth = Math.floor(availableWidth / numDays);
+                
+                $('.date-col, .schedule-cell').css('min-width', cellWidth + 'px');
+            }
+        }
+        
+        // 셀 너비 원복 함수
+        function resetCellWidths() {
+            $('.date-col').css('min-width', '180px');
+            $('.schedule-cell').css('min-width', '180px');
+        }
+        
         // 전역 변수로 워크스케줄 데이터 저장
         let allWorkSchedules = [];
         
@@ -359,8 +574,26 @@
             const $workScheduleSelect = $modal.find('.work-schedule-select');
             $workScheduleSelect.empty().append('<option value="">-- 선택 --</option>');
             
-            allWorkSchedules.forEach(function(ws) {
-                $workScheduleSelect.append(`<option value="${ws.id}" data-display="${ws.display}">${ws.display}</option>`);
+            // 부서별 근무시간 로딩 (Ajax 요청 추가)
+            $.ajax({
+                url: '{% url "schedule:get_work_schedules_by_department" %}',
+                type: 'GET',
+                data: {
+                    'department_id': departmentId
+                },
+                success: function(data) {
+                    // 해당 부서에 할당된 근무시간만 표시
+                    data.work_schedules.forEach(function(ws) {
+                        $workScheduleSelect.append(`<option value="${ws.id}" data-display="${ws.display}">${ws.display}</option>`);
+                    });
+                },
+                error: function() {
+                    console.error('부서별 근무시간 데이터를 불러오는데 실패했습니다.');
+                    // 오류 발생 시 기본 근무시간 목록 표시 (fallback)
+                    allWorkSchedules.forEach(function(ws) {
+                        $workScheduleSelect.append(`<option value="${ws.id}" data-display="${ws.display}">${ws.display}</option>`);
+                    });
+                }
             });
             
             // 의사 목록 로딩
@@ -474,12 +707,27 @@
                                 .attr('data-work-schedule', workScheduleId)
                                 .attr('data-doctor', doctorId)
                                 .html(`<span class="delete-schedule" title="삭제">×</span>
-                                      <strong>${workScheduleText}</strong><br>
-                                      <span class="doctor-name">${response.doctor.name}</span>
-                                      <small class="d-block text-muted phone-number">${response.doctor.phone_number}</small>`);
+                                      <div class="time-info">
+                                        <strong>${workScheduleText}</strong>
+                                      </div>
+                                      <div class="doctor-info">
+                                        <span class="doctor-name">${response.doctor.name}</span>
+                                        <span class="contact-info d-block text-muted phone-number">${response.doctor.phone_number}</span>
+                                      </div>`);
                             
                             // 관리자 컨트롤 요소 앞에 삽입
                             cell.find('.admin-controls').before(scheduleItem);
+                            
+                            // 현재 필터링 설정 적용
+                            if(!$('#show-work-time').is(':checked')) {
+                                scheduleItem.find('.time-info').hide();
+                            }
+                            if(!$('#show-doctor-name').is(':checked')) {
+                                scheduleItem.find('.doctor-name').hide();
+                            }
+                            if(!$('#show-phone-number').is(':checked')) {
+                                scheduleItem.find('.phone-number').hide();
+                            }
                         } else {
                             // 기존 스케줄 요소 업데이트
                             scheduleItem.attr('data-doctor', doctorId);
@@ -534,4 +782,4 @@
     });
 </script>
 {% endif %}
-{% endblock %} 
+{% endblock %}

@@ -15,11 +15,12 @@ class ScheduleForm(forms.ModelForm):
 class WorkScheduleForm(forms.ModelForm):
     class Meta:
         model = WorkSchedule
-        fields = ['start_time', 'end_time', 'description']
+        fields = ['start_time', 'end_time', 'description', 'departments']
         widgets = {
             'start_time': forms.Select(attrs={'class': 'form-select'}),
             'end_time': forms.Select(attrs={'class': 'form-select'}),
             'description': forms.TextInput(attrs={'class': 'form-control'}),
+            'departments': forms.SelectMultiple(attrs={'class': 'form-select', 'size': '5'}),
         }
 
 class QuickScheduleForm(forms.Form):
@@ -123,10 +124,14 @@ class QuickScheduleForm(forms.Form):
             doctor.save()
         
         # 근무 시간대 조회 또는 생성
-        work_schedule, _ = WorkSchedule.objects.get_or_create(
+        work_schedule, created = WorkSchedule.objects.get_or_create(
             start_time=start_time,
             end_time=end_time
         )
+        
+        # 시간대에 부서 추가
+        if created or department not in work_schedule.departments.all():
+            work_schedule.departments.add(department)
         
         # 일정 생성
         schedule = Schedule.objects.create(

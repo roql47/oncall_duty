@@ -87,7 +87,7 @@ class ScheduleMonthView(ListView):
         
         # 모든 의사 및 근무시간 (관리자용 드롭다운)
         if self.request.user.is_staff:
-            context['all_doctors'] = Doctor.objects.all().order_by('department__name', 'name')
+            context['all_doctors'] = Doctor.objects.all().order_by('name')
             context['all_work_schedules'] = WorkSchedule.objects.all().order_by('start_time')
         
         # 날짜별로 일정 그룹화 및 날짜 순서대로 정렬
@@ -735,7 +735,7 @@ def get_doctors_by_department(request):
     if not department_id:
         return JsonResponse({'error': '부서 ID가 필요합니다.'}, status=400)
     
-    doctors = Doctor.objects.filter(department_id=department_id).values('id', 'name')
+    doctors = Doctor.objects.filter(department_id=department_id).order_by('name').values('id', 'name')
     
     return JsonResponse({
         'doctors': list(doctors)
@@ -833,7 +833,7 @@ def admin_schedule_edit(request, year=None, month=None):
         current_date += timedelta(days=1)
     
     # 모든 의사 가져오기
-    doctors = Doctor.objects.all().order_by('department__name', 'name')
+    doctors = Doctor.objects.all().order_by('name')
     
     # 다음 달과 이전 달 계산
     if month == 1:
@@ -936,25 +936,50 @@ def update_month_schedule(request):
             
             work_schedule = get_object_or_404(WorkSchedule, id=work_schedule_id)
             doctor = get_object_or_404(Doctor, id=doctor_id)
+            department_id = doctor.department.id
             
-            # 같은 날짜, 같은 근무시간에 이미 존재하는 스케줄 확인
-            schedule, created = Schedule.objects.update_or_create(
-                date=date_obj,
-                work_schedule=work_schedule,
-                defaults={
-                    'doctor': doctor,
-                    'is_on_call': is_on_call
-                }
-            )
-            
-            return JsonResponse({
-                'status': 'success',
-                'schedule_id': schedule.id,
-                'doctor': {
-                    'name': doctor.name,
-                    'phone_number': doctor.phone_number or ''
-                }
-            })
+            # 근무 시간대가 해당 부서에 할당되어 있는지 확인
+            if work_schedule.departments.filter(id=department_id).exists() or not work_schedule.departments.exists():
+                # 같은 날짜, 같은 근무시간, 같은 부서에 이미 존재하는 스케줄 확인
+                existing_schedule = Schedule.objects.filter(
+                    date=date_obj,
+                    work_schedule=work_schedule,
+                    doctor__department=doctor.department
+                ).first()
+                
+                weekday = ['월', '화', '수', '목', '금', '토', '일'][date_obj.weekday()]
+                
+                if existing_schedule:
+                    # 기존 일정 업데이트
+                    existing_schedule.doctor = doctor
+                    existing_schedule.is_on_call = is_on_call
+                    existing_schedule.weekday = weekday
+                    existing_schedule.save()
+                    schedule = existing_schedule
+                else:
+                    # 새 일정 생성
+                    schedule = Schedule.objects.create(
+                        date=date_obj,
+                        work_schedule=work_schedule,
+                        doctor=doctor,
+                        is_on_call=is_on_call,
+                        weekday=weekday
+                    )
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'schedule_id': schedule.id,
+                    'doctor': {
+                        'name': doctor.name,
+                        'phone_number': doctor.phone_number or ''
+                    }
+                })
+            else:
+                return JsonResponse({
+                    'status': 'error', 
+                    'message': f'해당 근무 시간대({work_schedule})는 {doctor.department.name} 부서에서 사용할 수 없습니다.'
+                }, status=400)
+                
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
     
@@ -983,7 +1008,20 @@ def delete_schedule(request):
 @login_required
 def get_work_schedules(request):
     """근무시간 목록을 JSON으로 반환하는 AJAX 뷰"""
-    work_schedules = WorkSchedule.objects.all().order_by('start_time')
+    department_id = request.GET.get('department_id')
+    
+    if department_id:
+        # 특정 부서 ID가 제공된 경우, 해당 부서에 연결된 근무 시간대만 반환
+        department = get_object_or_404(Department, id=department_id)
+        work_schedules = department.work_schedules.all().order_by('start_time')
+        
+        # 부서에 연결된 근무 시간대가 없으면 모든 근무 시간대 반환
+        if not work_schedules.exists():
+            work_schedules = WorkSchedule.objects.all().order_by('start_time')
+    else:
+        # 부서 ID가 제공되지 않은 경우 모든 근무 시간대 반환
+        work_schedules = WorkSchedule.objects.all().order_by('start_time')
+    
     data = {
         'work_schedules': [
             {
@@ -993,3 +1031,36 @@ def get_work_schedules(request):
         ]
     }
     return JsonResponse(data)
+
+@login_required
+def get_work_schedules_by_department(request):
+    """특정 부서에 할당된 근무시간 목록만 JSON으로 반환하는 AJAX 뷰"""
+    department_id = request.GET.get('department_id')
+    
+    if not department_id:
+        return JsonResponse({'status': 'error', 'message': '부서 ID가 필요합니다.'}, status=400)
+    
+    try:
+        department = get_object_or_404(Department, id=department_id)
+        
+        # 해당 부서에 명시적으로 할당된 근무 시간대 가져오기
+        department_work_schedules = WorkSchedule.objects.filter(departments=department).order_by('start_time')
+        
+        # 특정 부서에 할당되지 않은 모든 부서 공통 근무 시간대 가져오기
+        common_work_schedules = WorkSchedule.objects.filter(departments__isnull=True).order_by('start_time')
+        
+        # 두 쿼리셋 병합
+        work_schedules = list(department_work_schedules) + list(common_work_schedules)
+        
+        data = {
+            'status': 'success',
+            'work_schedules': [
+                {
+                    'id': ws.id,
+                    'display': str(ws)
+                } for ws in work_schedules
+            ]
+        }
+        return JsonResponse(data)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)

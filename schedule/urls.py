@@ -22,6 +22,7 @@ urlpatterns = [
     path('assign_doctor/', views.assign_doctor, name='assign_doctor'),
     path('ajax/get_doctors_by_department/', views.get_doctors_by_department, name='get_doctors_by_department'),
     path('ajax/get_work_schedules/', views.get_work_schedules, name='get_work_schedules'),
+    path('ajax/get_work_schedules_by_department/', views.get_work_schedules_by_department, name='get_work_schedules_by_department'),
     
     # 관리자용 스케줄 편집 URL
     path('admin/schedule/', views.admin_schedule_edit, name='admin_schedule_edit'),
