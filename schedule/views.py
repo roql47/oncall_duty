@@ -16,6 +16,9 @@ import calendar
 from calendar import HTMLCalendar, monthrange
 from datetime import date
 from django.shortcuts import get_object_or_404
+from django.views.decorators.csrf import csrf_exempt
+import json
+from collections import defaultdict
 
 class HomeView(TemplateView):
     template_name = 'schedule/home.html'
@@ -87,7 +90,7 @@ class ScheduleMonthView(ListView):
         
         # 모든 의사 및 근무시간 (관리자용 드롭다운)
         if self.request.user.is_staff:
-            context['all_doctors'] = Doctor.objects.all().order_by('department__name', 'name')
+            context['all_doctors'] = Doctor.objects.all().order_by('name')
             context['all_work_schedules'] = WorkSchedule.objects.all().order_by('start_time')
         
         # 날짜별로 일정 그룹화 및 날짜 순서대로 정렬
@@ -735,7 +738,7 @@ def get_doctors_by_department(request):
     if not department_id:
         return JsonResponse({'error': '부서 ID가 필요합니다.'}, status=400)
     
-    doctors = Doctor.objects.filter(department_id=department_id).values('id', 'name')
+    doctors = Doctor.objects.filter(department_id=department_id).order_by('name').values('id', 'name')
     
     return JsonResponse({
         'doctors': list(doctors)
@@ -833,7 +836,7 @@ def admin_schedule_edit(request, year=None, month=None):
         current_date += timedelta(days=1)
     
     # 모든 의사 가져오기
-    doctors = Doctor.objects.all().order_by('department__name', 'name')
+    doctors = Doctor.objects.all().order_by('name')
     
     # 다음 달과 이전 달 계산
     if month == 1:
@@ -936,25 +939,50 @@ def update_month_schedule(request):
             
             work_schedule = get_object_or_404(WorkSchedule, id=work_schedule_id)
             doctor = get_object_or_404(Doctor, id=doctor_id)
+            department_id = doctor.department.id
             
-            # 같은 날짜, 같은 근무시간에 이미 존재하는 스케줄 확인
-            schedule, created = Schedule.objects.update_or_create(
-                date=date_obj,
-                work_schedule=work_schedule,
-                defaults={
-                    'doctor': doctor,
-                    'is_on_call': is_on_call
-                }
-            )
-            
-            return JsonResponse({
-                'status': 'success',
-                'schedule_id': schedule.id,
-                'doctor': {
-                    'name': doctor.name,
-                    'phone_number': doctor.phone_number or ''
-                }
-            })
+            # 근무 시간대가 해당 부서에 할당되어 있는지 확인
+            if work_schedule.departments.filter(id=department_id).exists() or not work_schedule.departments.exists():
+                # 같은 날짜, 같은 근무시간, 같은 부서에 이미 존재하는 스케줄 확인
+                existing_schedule = Schedule.objects.filter(
+                    date=date_obj,
+                    work_schedule=work_schedule,
+                    doctor__department=doctor.department
+                ).first()
+                
+                weekday = ['월', '화', '수', '목', '금', '토', '일'][date_obj.weekday()]
+                
+                if existing_schedule:
+                    # 기존 일정 업데이트
+                    existing_schedule.doctor = doctor
+                    existing_schedule.is_on_call = is_on_call
+                    existing_schedule.weekday = weekday
+                    existing_schedule.save()
+                    schedule = existing_schedule
+                else:
+                    # 새 일정 생성
+                    schedule = Schedule.objects.create(
+                        date=date_obj,
+                        work_schedule=work_schedule,
+                        doctor=doctor,
+                        is_on_call=is_on_call,
+                        weekday=weekday
+                    )
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'schedule_id': schedule.id,
+                    'doctor': {
+                        'name': doctor.name,
+                        'phone_number': doctor.phone_number or ''
+                    }
+                })
+            else:
+                return JsonResponse({
+                    'status': 'error', 
+                    'message': f'해당 근무 시간대({work_schedule})는 {doctor.department.name} 부서에서 사용할 수 없습니다.'
+                }, status=400)
+                
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
     
@@ -983,7 +1011,20 @@ def delete_schedule(request):
 @login_required
 def get_work_schedules(request):
     """근무시간 목록을 JSON으로 반환하는 AJAX 뷰"""
-    work_schedules = WorkSchedule.objects.all().order_by('start_time')
+    department_id = request.GET.get('department_id')
+    
+    if department_id:
+        # 특정 부서 ID가 제공된 경우, 해당 부서에 연결된 근무 시간대만 반환
+        department = get_object_or_404(Department, id=department_id)
+        work_schedules = department.work_schedules.all().order_by('start_time')
+        
+        # 부서에 연결된 근무 시간대가 없으면 모든 근무 시간대 반환
+        if not work_schedules.exists():
+            work_schedules = WorkSchedule.objects.all().order_by('start_time')
+    else:
+        # 부서 ID가 제공되지 않은 경우 모든 근무 시간대 반환
+        work_schedules = WorkSchedule.objects.all().order_by('start_time')
+    
     data = {
         'work_schedules': [
             {
@@ -993,3 +1034,261 @@ def get_work_schedules(request):
         ]
     }
     return JsonResponse(data)
+
+@login_required
+def get_work_schedules_by_department(request):
+    """특정 부서에 할당된 근무시간 목록만 JSON으로 반환하는 AJAX 뷰"""
+    department_id = request.GET.get('department_id')
+    
+    if not department_id:
+        return JsonResponse({'status': 'error', 'message': '부서 ID가 필요합니다.'}, status=400)
+    
+    try:
+        department = get_object_or_404(Department, id=department_id)
+        
+        # 해당 부서에 명시적으로 할당된 근무 시간대 가져오기
+        department_work_schedules = WorkSchedule.objects.filter(departments=department).order_by('start_time')
+        
+        # 특정 부서에 할당되지 않은 모든 부서 공통 근무 시간대 가져오기
+        common_work_schedules = WorkSchedule.objects.filter(departments__isnull=True).order_by('start_time')
+        
+        # 두 쿼리셋 병합
+        work_schedules = list(department_work_schedules) + list(common_work_schedules)
+        
+        data = {
+            'status': 'success',
+            'work_schedules': [
+                {
+                    'id': ws.id,
+                    'display': str(ws)
+                } for ws in work_schedules
+            ]
+        }
+        return JsonResponse(data)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+@login_required
+@require_POST
+def copy_schedules_to_next_month(request):
+    """현재 달의 스케줄을 다음 달로 복사합니다."""
+    if not request.user.is_staff:
+        return JsonResponse({'status': 'error', 'message': '관리자만 접근할 수 있습니다.'}, status=403)
+    
+    try:
+        year = int(request.POST.get('year'))
+        month = int(request.POST.get('month'))
+        
+        # 현재 달의 시작일과 종료일
+        start_date = datetime(year, month, 1).date()
+        if month == 12:
+            end_date = datetime(year + 1, 1, 1).date() - timedelta(days=1)
+        else:
+            end_date = datetime(year, month + 1, 1).date() - timedelta(days=1)
+        
+        # 다음 달의 시작일과 종료일
+        if month == 12:
+            next_start_date = datetime(year + 1, 1, 1).date()
+            next_end_date = datetime(year + 1, 2, 1).date() - timedelta(days=1)
+        else:
+            next_start_date = datetime(year, month + 1, 1).date()
+            next_end_date = datetime(year, month + 2, 1).date() - timedelta(days=1)
+        
+        # 현재 달의 모든 스케줄 가져오기
+        current_schedules = Schedule.objects.filter(
+            date__gte=start_date,
+            date__lte=end_date
+        ).select_related('doctor', 'work_schedule')
+        
+        # 다음 달의 기존 스케줄 삭제
+        Schedule.objects.filter(
+            date__gte=next_start_date,
+            date__lte=next_end_date
+        ).delete()
+        
+        # 스케줄 복사
+        for schedule in current_schedules:
+            # 다음 달의 해당 날짜 계산
+            days_diff = (schedule.date - start_date).days
+            next_date = next_start_date + timedelta(days=days_diff)
+            
+            # 새로운 스케줄 생성
+            Schedule.objects.create(
+                date=next_date,
+                doctor=schedule.doctor,
+                work_schedule=schedule.work_schedule,
+                is_on_call=schedule.is_on_call
+            )
+        
+        return JsonResponse({'status': 'success'})
+        
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+@login_required
+@require_POST
+def copy_prev_month_schedule(request):
+    """이전 달의 스케줄을 현재 달로 복사합니다."""
+    if not request.user.is_staff:
+        return JsonResponse({'status': 'error', 'message': '관리자만 접근할 수 있습니다.'}, status=403)
+    
+    try:
+        current_year = int(request.POST.get('current_year'))
+        current_month = int(request.POST.get('current_month'))
+        prev_year = int(request.POST.get('prev_year'))
+        prev_month = int(request.POST.get('prev_month'))
+        
+        # 이전 달의 시작일과 종료일
+        prev_start_date = datetime(prev_year, prev_month, 1).date()
+        if prev_month == 12:
+            prev_end_date = datetime(prev_year + 1, 1, 1).date() - timedelta(days=1)
+        else:
+            prev_end_date = datetime(prev_year, prev_month + 1, 1).date() - timedelta(days=1)
+        
+        # 현재 달의 시작일과 종료일
+        current_start_date = datetime(current_year, current_month, 1).date()
+        if current_month == 12:
+            current_end_date = datetime(current_year + 1, 1, 1).date() - timedelta(days=1)
+        else:
+            current_end_date = datetime(current_year, current_month + 1, 1).date() - timedelta(days=1)
+        
+        # 이전 달의 모든 스케줄 가져오기
+        prev_schedules = Schedule.objects.filter(
+            date__gte=prev_start_date,
+            date__lte=prev_end_date
+        ).select_related('doctor', 'work_schedule')
+        
+        # 현재 달의 기존 스케줄 삭제
+        Schedule.objects.filter(
+            date__gte=current_start_date,
+            date__lte=current_end_date
+        ).delete()
+        
+        # 이전 달의 스케줄을 현재 달로 복사
+        for prev_schedule in prev_schedules:
+            # 현재 달의 해당 날짜 계산
+            days_diff = (prev_schedule.date - prev_start_date).days
+            new_date = current_start_date + timedelta(days=days_diff)
+            
+            # 요일 매핑
+            weekday_map = {
+                0: '월',
+                1: '화',
+                2: '수',
+                3: '목',
+                4: '금',
+                5: '토',
+                6: '일',
+            }
+            new_weekday = weekday_map[new_date.weekday()]
+            
+            # 새로운 스케줄 생성
+            Schedule.objects.create(
+                date=new_date,
+                weekday=new_weekday,
+                doctor=prev_schedule.doctor,
+                work_schedule=prev_schedule.work_schedule,
+                is_on_call=prev_schedule.is_on_call,
+                note=prev_schedule.note
+            )
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': '이전 달의 일정이 성공적으로 복사되었습니다.'
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': f'일정 복사 중 오류가 발생했습니다: {str(e)}'
+        }, status=400)
+
+@login_required
+@require_POST
+@csrf_exempt
+def apply_first_week_schedule(request):
+    """첫 주 스케줄을 월 전체에 적용하는 기능"""
+    if not request.user.is_staff:
+        return JsonResponse({'success': False, 'error': '권한이 없습니다.'})
+    
+    try:
+        data = json.loads(request.body)
+        department_id = data.get('department_id')
+        year = data.get('year')
+        month = data.get('month')
+        
+        if not all([department_id, year, month]):
+            return JsonResponse({'success': False, 'error': '필수 파라미터가 누락되었습니다.'})
+        
+        # 해당 월의 1일~7일까지의 스케줄 패턴 가져오기
+        first_day = datetime(int(year), int(month), 1).date()
+        seventh_day = datetime(int(year), int(month), 7).date()
+        
+        # 첫 주(1일~7일)의 스케줄 패턴 가져오기
+        first_week_schedules = Schedule.objects.filter(
+            date__gte=first_day,
+            date__lte=seventh_day,
+            doctor__department_id=department_id
+        ).select_related('doctor', 'work_schedule')
+        
+        # 날짜별 스케줄 패턴 저장 (1일=1, 2일=2, ..., 7일=7)
+        day_patterns = defaultdict(list)
+        for schedule in first_week_schedules:
+            day_num = schedule.date.day  # 1, 2, 3, 4, 5, 6, 7
+            day_patterns[day_num].append({
+                'doctor_id': schedule.doctor.id,
+                'work_schedule_id': schedule.work_schedule.id,
+                'is_on_call': schedule.is_on_call,
+                'note': schedule.note
+            })
+        
+        # 해당 월의 모든 날짜에 패턴 적용
+        if month == 12:
+            last_day = datetime(int(year) + 1, 1, 1).date() - timedelta(days=1)
+        else:
+            last_day = datetime(int(year), int(month) + 1, 1).date() - timedelta(days=1)
+        
+        current_date = first_day
+        created_count = 0
+        
+        while current_date <= last_day:
+            # 현재 날짜가 1~7일 중 어느 패턴에 해당하는지 계산
+            pattern_day = ((current_date.day - 1) % 7) + 1  # 1~7 사이클 반복
+            weekday_map = {0: '월', 1: '화', 2: '수', 3: '목', 4: '금', 5: '토', 6: '일'}
+            current_weekday = weekday_map[current_date.weekday()]
+            
+            if pattern_day in day_patterns:
+                # 해당 날짜의 기존 스케줄 삭제 (해당 부서만)
+                Schedule.objects.filter(
+                    date=current_date,
+                    doctor__department_id=department_id
+                ).delete()
+                
+                # 새 스케줄 생성
+                for pattern in day_patterns[pattern_day]:
+                    try:
+                        doctor = Doctor.objects.get(id=pattern['doctor_id'])
+                        work_schedule = WorkSchedule.objects.get(id=pattern['work_schedule_id'])
+                        
+                        Schedule.objects.create(
+                            date=current_date,
+                            weekday=current_weekday,
+                            doctor=doctor,
+                            work_schedule=work_schedule,
+                            is_on_call=pattern['is_on_call'],
+                            note=pattern['note']
+                        )
+                        created_count += 1
+                    except (Doctor.DoesNotExist, WorkSchedule.DoesNotExist):
+                        continue
+            
+            current_date += timedelta(days=1)
+        
+        return JsonResponse({
+            'success': True, 
+            'message': f'1일~7일 스케줄이 {month}월 전체에 적용되었습니다. (생성: {created_count}개)',
+            'created_count': created_count
+        })
+        
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})

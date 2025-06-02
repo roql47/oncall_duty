@@ -7,3 +7,5 @@ django
 python-dotenv
 # pymilvus  # 미사용 - 도커 관련 코드로 제거
 # pymilvus-lite  # 사용할 수 없음 
+google-generativeai>=0.3.0
+faiss-cpu 

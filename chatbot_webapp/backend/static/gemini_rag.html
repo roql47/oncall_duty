@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini RAG 챗봇</title>
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .chat-container {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .chat-messages {
+            height: 400px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: white;
+            border-radius: 5px;
+            border: 1px solid #eee;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .user-message {
+            background-color: #e3f2fd;
+            margin-left: 20px;
+            margin-right: 5px;
+        }
+        .bot-message {
+            background-color: #f1f1f1;
+            margin-left: 5px;
+            margin-right: 20px;
+        }
+        .message-input {
+            display: flex;
+            gap: 10px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4caf50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #388e3c;
+        }
+        .source-info {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+            border-top: 1px solid #eee;
+            padding-top: 5px;
+        }
+        .loading {
+            text-align: center;
+            padding: 10px;
+            font-style: italic;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>Gemini RAG 챗봇</h1>
+    <p>벡터 DB에서 관련 정보를 검색하여 Gemini 2.0 Flash 모델로 응답합니다.</p>
+    
+    <div class="chat-container">
+        <div class="chat-messages" id="chatMessages">
+            <div class="message bot-message">
+                안녕하세요! 무엇을 도와드릴까요? 질문을 입력해주세요.
+            </div>
+        </div>
+        
+        <div class="message-input">
+            <input type="text" id="userInput" placeholder="질문을 입력하세요..." autocomplete="off">
+            <button onclick="sendMessage()">전송</button>
+        </div>
+    </div>
+    
+    <script>
+        // 엔터 키로 메시지 전송 가능하게 설정
+        document.getElementById('userInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        
+        async function sendMessage() {
+            const userInput = document.getElementById('userInput');
+            const chatMessages = document.getElementById('chatMessages');
+            
+            const userMessage = userInput.value.trim();
+            if (!userMessage) return;
+            
+            // 사용자 메시지 추가
+            chatMessages.innerHTML += `
+                <div class="message user-message">
+                    ${escapeHtml(userMessage)}
+                </div>
+            `;
+            
+            // 로딩 메시지 추가
+            const loadingId = 'loading-' + Date.now();
+            chatMessages.innerHTML += `
+                <div class="message bot-message loading" id="${loadingId}">
+                    응답 생성 중...
+                </div>
+            `;
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            // 입력창 비우기
+            userInput.value = '';
+            
+            try {
+                // API 호출
+                const response = await fetch('/rag', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        query: userMessage,
+                        max_results: 5
+                    })
+                });
+                
+                const data = await response.json();
+                
+                // 로딩 메시지 제거
+                const loadingElement = document.getElementById(loadingId);
+                if (loadingElement) {
+                    loadingElement.remove();
+                }
+                
+                if (data.status === 'success') {
+                    // 봇 메시지 추가
+                    let sourcesHtml = '';
+                    if (data.sources && data.sources.length > 0) {
+                        sourcesHtml = '<div class="source-info"><strong>참고 정보:</strong><ul>';
+                        data.sources.forEach(source => {
+                            sourcesHtml += `<li>${escapeHtml(source.entity.text)}</li>`;
+                        });
+                        sourcesHtml += '</ul></div>';
+                    }
+                    
+                    chatMessages.innerHTML += `
+                        <div class="message bot-message">
+                            ${escapeHtml(data.answer).replace(/\n/g, '<br>')}
+                            ${sourcesHtml}
+                        </div>
+                    `;
+                } else {
+                    // 오류 메시지 표시
+                    chatMessages.innerHTML += `
+                        <div class="message bot-message">
+                            ${escapeHtml(data.message || '응답 생성 중 오류가 발생했습니다.')}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                // 오류 처리
+                const loadingElement = document.getElementById(loadingId);
+                if (loadingElement) {
+                    loadingElement.remove();
+                }
+                
+                chatMessages.innerHTML += `
+                    <div class="message bot-message">
+                        요청 처리 중 오류가 발생했습니다: ${error.message}
+                    </div>
+                `;
+            }
+            
+            // 스크롤 맨 아래로
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        // HTML 이스케이프 함수
+        function escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html> 
