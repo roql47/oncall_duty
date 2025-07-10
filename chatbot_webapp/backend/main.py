@@ -4,6 +4,7 @@ from pydantic import BaseModel # type: ignore
 import json
 import os
 import sqlite3
+import time
 from datetime import datetime, timedelta
 import re
 # 임베디드 벡터 검색을 위한 FAISS 사용
@@ -62,8 +63,28 @@ app.add_middleware(
 VECTOR_DB_PATH = "./vector_db.pkl"  # 벡터 및 메타데이터 저장 파일
 VECTOR_DIM = 384  # SentenceTransformer 모델 출력 차원
 
-# SentenceTransformer 모델 로드
-model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+# SentenceTransformer 모델 로드 - 성능 최적화를 위해 더 빠른 모델 사용
+print("임베딩 모델 로딩 중...")
+# 더 빠른 성능을 위해 더 가벼운 모델 사용
+model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')  # 기존 모델보다 빠름
+
+# GPU 사용 가능 여부 확인
+import torch
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f"사용할 디바이스: {device}")
+
+# 모델을 GPU로 이동 (가능한 경우)
+if torch.cuda.is_available():
+    model = model.to(device)
+    print("GPU 가속 활성화됨")
+else:
+    print("CPU 모드로 실행")
+
+print("임베딩 모델 로딩 완료!")
+
+# 성능 최적화를 위한 배치 크기 설정
+# GPU 사용 시 더 큰 배치 크기로 설정
+EMBEDDING_BATCH_SIZE = 300 if torch.cuda.is_available() else 200
 
 # FAISS 인덱스 초기화 또는 로드
 class FAISSVectorStore:
@@ -97,7 +118,7 @@ class FAISSVectorStore:
             pickle.dump({'index': self.index, 'metadata': self.metadata}, f)
         print(f"벡터 데이터베이스를 저장했습니다. 벡터 수: {len(self.metadata)}")
     
-    def add_vectors(self, vectors, metadata_list):
+    def add_vectors(self, vectors, metadata_list, incremental=False):
         """벡터와 메타데이터 추가"""
         if len(vectors) == 0:
             return
@@ -105,14 +126,19 @@ class FAISSVectorStore:
         # 벡터를 numpy 배열로 변환
         vectors_np = np.array(vectors).astype('float32')
         
-        # 기존 인덱스 삭제하고 새로 생성
-        self.index = faiss.IndexFlatIP(self.vector_dim)
-        self.metadata = metadata_list
+        if incremental and self.index.ntotal > 0:
+            # 증분 업데이트: 기존 벡터 유지하면서 새로운 벡터 추가
+            self.index.add(vectors_np)
+            self.metadata.extend(metadata_list)
+            print(f"{len(vectors)}개의 벡터를 기존 {self.index.ntotal - len(vectors)}개에 추가했습니다.")
+        else:
+            # 전체 교체: 기존 인덱스 삭제하고 새로 생성
+            self.index = faiss.IndexFlatIP(self.vector_dim)
+            self.metadata = metadata_list
+            self.index.add(vectors_np)
+            print(f"{len(vectors)}개의 벡터를 새로 생성했습니다.")
         
-        # 벡터 추가
-        self.index.add(vectors_np)
         self.save_index()
-        print(f"{len(vectors)}개의 벡터를 추가했습니다.")
     
     def search(self, query_vector, k=3):
         """벡터 검색"""
@@ -144,54 +170,88 @@ except Exception as e:
     print(f"벡터 검색 초기화 오류: {e}")
     vector_store = None
 
+# 전역 변수로 업데이트 진행 상황 저장
+update_progress = {
+    "status": "idle",  # idle, running, completed, error
+    "progress": 0,     # 0-100
+    "message": "",
+    "total_steps": 0,
+    "current_step": 0
+}
+
 # Django DB에서 데이터를 가져와 벡터 DB에 추가하는 함수
 def update_vector_db_from_django_sync():
-    """Django DB에서 당직 스케줄 데이터를 가져와 임베디드 벡터 DB에 추가 (동기 함수)"""
+    """Django DB에서 당직 스케줄 데이터를 가져와 임베디드 벡터 DB에 추가 (동기 함수) - 성능 최적화"""
+    global update_progress
+    
     try:
+        # 업데이트 시작
+        update_progress["status"] = "running"
+        update_progress["progress"] = 0
+        update_progress["message"] = "벡터 DB 업데이트 시작..."
+        update_progress["current_step"] = 0
+        
+        print(f"===== 벡터 DB 업데이트 시작 =====")
+        
         if vector_store is None:
             print("벡터 DB가 초기화되지 않았습니다. 업데이트를 건너뜁니다.")
+            update_progress["status"] = "error"
+            update_progress["message"] = "벡터 DB가 초기화되지 않았습니다."
             return {"status": "error", "message": "벡터 DB가 초기화되지 않았습니다. 기능을 사용할 수 없습니다."}
             
-        # 데이터 초기화
-        vectors = []
-        metadata_list = []
-        
-        # 오늘부터 모든 미래 스케줄 조회
+        # 현재 년도와 월 기준으로 스케줄 조회
         today = datetime.now().date()
+        current_year = today.year
+        current_month = today.month
         
-        print(f"===== 벡터 DB 업데이트 시작: 현재 날짜 {today} =====")
+        print(f"===== 벡터 DB 업데이트 시작: 현재 날짜 {today} (년도: {current_year}, 월: {current_month}) =====")
         
-        # Django 모델에서 모든 스케줄 데이터 가져오기 (미래 날짜 제한 없음)
-        schedules = Schedule.objects.all().select_related('doctor', 'doctor__department', 'work_schedule')
+        # Django 모델에서 현재 년도와 월의 스케줄 데이터만 가져오기
+        update_progress["message"] = f"{current_year}년 {current_month}월 스케줄 데이터 조회 중..."
+        update_progress["progress"] = 10
+        
+        schedules = Schedule.objects.filter(
+            date__year=current_year,
+            date__month=current_month
+        ).select_related('doctor', 'doctor__department', 'work_schedule')
         
         print(f"Django DB에서 총 {len(schedules)}개의 스케줄을 가져왔습니다.")
-        
-        # 모든 스케줄 데이터를 로그로 출력
-        print(f"모든 스케줄 정보:")
-        for i, schedule in enumerate(schedules):
-            print(f"  {i+1}. {schedule.date} - {schedule.doctor.department.name} - {schedule.work_schedule} - {schedule.doctor.name}")
-        
-        # 날짜별 스케줄 카운트
-        date_counts = {}
-        for schedule in schedules:
-            date_str = schedule.date.strftime('%Y-%m-%d')
-            if date_str in date_counts:
-                date_counts[date_str] += 1
-            else:
-                date_counts[date_str] = 1
-        
-        # 날짜별 스케줄 수 출력
-        print("날짜별 스케줄 수:")
-        for date_str, count in sorted(date_counts.items()):
-            print(f"  {date_str}: {count}개")
         
         # 데이터가 없으면 경고 메시지 반환
         if len(schedules) == 0:
             print("주의: 스케줄 데이터가 없습니다. 챗봇 응답이 제한될 수 있습니다.")
+            update_progress["status"] = "completed"
+            update_progress["message"] = "스케줄 데이터가 없습니다. 관리자 페이지에서 일정을 추가해주세요."
             return {"status": "warning", "message": "스케줄 데이터가 없습니다. 관리자 페이지에서 일정을 추가해주세요."}
         
-        # 스케줄 데이터를 문서 형태로 변환
-        for count, schedule in enumerate(schedules):
+        # 전체 작업 단계 설정
+        update_progress["total_steps"] = len(schedules)
+        update_progress["message"] = f"총 {len(schedules)}개 스케줄 데이터 처리 중..."
+        update_progress["progress"] = 20
+        
+        # 성능 최적화: 증분 업데이트 - 이미 처리된 스케줄 ID 확인
+        existing_schedule_ids = set()
+        if vector_store.metadata:
+            existing_schedule_ids = {item.get('schedule_id') for item in vector_store.metadata if item.get('schedule_id')}
+        
+        # 새로운 스케줄만 필터링
+        new_schedules = [s for s in schedules if s.id not in existing_schedule_ids]
+        
+        if len(new_schedules) == 0:
+            print("새로운 스케줄 데이터가 없습니다. 업데이트할 필요가 없습니다.")
+            update_progress["status"] = "completed"
+            update_progress["progress"] = 100
+            update_progress["message"] = "이미 최신 데이터입니다. 업데이트할 필요가 없습니다."
+            return {"status": "success", "message": "이미 최신 데이터입니다. 업데이트할 필요가 없습니다."}
+        
+        print(f"기존 스케줄: {len(existing_schedule_ids)}개, 새로운 스케줄: {len(new_schedules)}개")
+        
+        # 성능 최적화: 모든 문서를 한 번에 준비
+        documents = []
+        metadata_list = []
+        
+        print("문서 데이터 준비 중...")
+        for count, schedule in enumerate(new_schedules):
             date_str = schedule.date.strftime('%Y-%m-%d')
             dept_name = schedule.doctor.department.name
             role_name = str(schedule.work_schedule)
@@ -200,16 +260,9 @@ def update_vector_db_from_django_sync():
             
             # 문서 텍스트 생성
             document = f"{date_str} {dept_name}의 {role_name}는 {doctor_name}입니다. 연락처는 {phone_number}입니다."
+            documents.append(document)
             
-            # 진행 상황 로그 (100개마다 출력)
-            if count % 100 == 0 and count > 0:
-                print(f"  {count}개 처리 완료...")
-            
-            # 임베딩 생성
-            embedding = model.encode(document)
-            
-            # 벡터와 메타데이터 추가
-            vectors.append(embedding)
+            # 메타데이터 준비
             metadata_list.append({
                 "text": document,
                 "date": date_str,
@@ -220,21 +273,71 @@ def update_vector_db_from_django_sync():
                 "schedule_id": int(schedule.id)
             })
         
-        print(f"벡터 데이터 {len(vectors)}개를 생성했습니다.")
+        # 진행 상황 업데이트
+        update_progress["progress"] = 40
+        update_progress["message"] = "문서 데이터 준비 완료. 임베딩 생성 중..."
         
-        # 벡터 스토어에 데이터 추가
-        if vectors:
-            vector_store.add_vectors(vectors, metadata_list)
-            print(f"===== 벡터 DB 업데이트 완료: {len(vectors)}개 추가됨 =====")
-            return {"status": "success", "message": f"{len(vectors)}개의 문서가 벡터 DB에 추가되었습니다."}
+        # 성능 최적화: 배치로 임베딩 생성 (가장 큰 성능 개선)
+        print(f"배치 임베딩 생성 시작... (총 {len(documents)}개 새로운 문서)")
+        start_time = time.time()
+        
+        # 최적화된 배치 크기 사용
+        all_embeddings = []
+        
+        for i in range(0, len(documents), EMBEDDING_BATCH_SIZE):
+            batch_docs = documents[i:i+EMBEDDING_BATCH_SIZE]
+            
+            # GPU 사용 가능 시 더 빠른 처리
+            batch_embeddings = model.encode(batch_docs, convert_to_numpy=True, show_progress_bar=False)
+            all_embeddings.extend(batch_embeddings)
+            
+            # 진행 상황 업데이트 (배치 단위로)
+            progress = 40 + int((i + len(batch_docs)) / len(documents) * 40)  # 40%~80% 범위
+            update_progress["progress"] = progress
+            update_progress["message"] = f"임베딩 생성 중... ({i + len(batch_docs)}/{len(documents)})"
+            
+            batch_num = i//EMBEDDING_BATCH_SIZE + 1
+            if i == 0:
+                print(f"배치 {batch_num} 완료: {len(batch_docs)}개 문서 처리")
+            else:
+                current_time = time.time() - start_time
+                print(f"배치 {batch_num} 완료: {len(batch_docs)}개 문서 처리 ({current_time:.2f}초 경과)")
+        
+        embedding_time = time.time() - start_time
+        print(f"임베딩 생성 완료! 소요시간: {embedding_time:.2f}초")
+        print(f"벡터 데이터 {len(all_embeddings)}개를 생성했습니다.")
+        
+        # 벡터 스토어에 데이터 추가 (증분 업데이트 사용)
+        update_progress["message"] = "벡터 DB에 데이터 저장 중..."
+        update_progress["progress"] = 85
+        
+        if all_embeddings:
+            # 증분 업데이트로 새로운 벡터만 추가
+            vector_store.add_vectors(all_embeddings, metadata_list, incremental=True)
+            print(f"===== 벡터 DB 업데이트 완료: {len(all_embeddings)}개 추가됨 =====")
+            
+            # 업데이트 완료
+            update_progress["status"] = "completed"
+            update_progress["progress"] = 100
+            update_progress["message"] = f"업데이트 완료! {len(all_embeddings)}개 새로운 데이터가 추가되었습니다."
+            
+            return {"status": "success", "message": f"{current_year}년 {current_month}월 데이터 {len(all_embeddings)}개가 벡터 DB에 추가되었습니다."}
         else:
             print("추가할 데이터가 없습니다.")
-            return {"status": "success", "message": "추가할 데이터가 없습니다."}
+            update_progress["status"] = "completed"
+            update_progress["progress"] = 100
+            update_progress["message"] = "추가할 데이터가 없습니다."
+            return {"status": "success", "message": f"{current_year}년 {current_month}월에 추가할 데이터가 없습니다."}
             
     except Exception as e:
         import traceback
         print(f"벡터 DB 업데이트 오류: {e}")
         traceback.print_exc()
+        
+        # 에러 상태 업데이트
+        update_progress["status"] = "error"
+        update_progress["message"] = f"오류 발생: {str(e)}"
+        
         return {"status": "error", "message": f"벡터 DB 업데이트 중 오류 발생: {str(e)}"}
 
 # 비동기 함수로 래핑
@@ -845,11 +948,25 @@ get_schedule_from_db_async = sync_to_async(get_schedule_from_db)
 @app.get("/update-vectors")
 async def update_vectors():
     """벡터 DB를 Django DB의 최신 데이터로 업데이트"""
+    global update_progress
+    
     if vector_store is None:
         return {"status": "error", "message": "벡터 DB가 초기화되지 않았습니다. 기능을 사용할 수 없습니다."}
     
-    result = await update_vector_db_from_django_async()
-    return result
+    # 이미 업데이트가 진행 중이면 거부
+    if update_progress["status"] == "running":
+        return {"status": "error", "message": "이미 업데이트가 진행 중입니다."}
+    
+    # 백그라운드에서 업데이트 실행
+    asyncio.create_task(update_vector_db_from_django_async())
+    
+    # 즉시 응답 반환
+    return {"status": "started", "message": "벡터 DB 업데이트가 시작되었습니다."}
+
+@app.get("/update-progress")
+async def get_update_progress():
+    """벡터 DB 업데이트 진행 상황 조회"""
+    return update_progress
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
@@ -1030,6 +1147,79 @@ async def chat(req: ChatRequest):
                                             exact_match = True
                                             print(f"  부서 일치 항목 발견: {metadata}")
                                             break
+                        
+                        if date_dept_match and len(matching_schedules) > 0:
+                            print(f"날짜와 부서 일치 항목 {len(matching_schedules)}개 발견")
+                            
+                            # 현재 날짜 우선: 먼저 부서와 현재 날짜가 모두 일치하는 항목 찾기
+                            today_date = datetime.now().strftime('%Y-%m-%d')
+                            
+                            for result in search_results:
+                                metadata = result["entity"]
+                                if (metadata.get('department') == target_dept and 
+                                    metadata.get('date') == today_date):
+                                    best_match = metadata
+                                    exact_match = True
+                                    print(f"  부서+오늘날짜 일치 항목 발견: {metadata}")
+                                    break
+                            
+                            # 오늘 날짜가 없으면 부서와 지정된 날짜가 일치하는 항목 찾기
+                            if not exact_match and 'date' in entities:
+                                target_date = entities['date']
+                                for result in search_results:
+                                    metadata = result["entity"]
+                                    if (metadata.get('department') == target_dept and 
+                                        metadata.get('date') == target_date):
+                                        best_match = metadata
+                                        exact_match = True
+                                        print(f"  부서+지정날짜 일치 항목 발견: {metadata}")
+                                        break
+                                
+                                # 그래도 없으면 부서만 일치하는 항목 찾기 (가장 최근 날짜 우선)
+                                if not exact_match:
+                                    dept_matches = []
+                                    for result in search_results:
+                                        metadata = result["entity"]
+                                        if metadata.get('department') == target_dept:
+                                            dept_matches.append(metadata)
+                                    
+                                    if dept_matches:
+                                        # 날짜 기준으로 정렬하여 가장 최근 것 선택
+                                        dept_matches.sort(key=lambda x: x.get('date', ''), reverse=True)
+                                        best_match = dept_matches[0]
+                                        exact_match = True
+                                        print(f"  부서 일치 항목 발견 (최근 날짜 우선): {best_match}")
+                                
+                                # 특정 시간에 해당하는지 확인 (current_hour이 17시인 경우)
+                                if best_match and 'current_hour' in entities:
+                                    current_hour = entities['current_hour']
+                                    role = best_match.get('role', '')
+                                    
+                                    # 24시간 당직(08:00 - 08:00)인지 확인
+                                    if role == "08:00 - 08:00":
+                                        print(f"  24시간 당직이므로 현재 시간({current_hour}시)에 근무 중")
+                                    else:
+                                        # 다른 시간대인 경우 시간 범위 확인
+                                        times = role.split(' - ')
+                                        if len(times) == 2:
+                                            try:
+                                                start_hour = int(times[0].split(':')[0])
+                                                end_hour = int(times[1].split(':')[0])
+                                                
+                                                # 시간 범위 확인
+                                                in_time_range = False
+                                                if end_hour <= start_hour:  # 익일까지 근무
+                                                    in_time_range = current_hour >= start_hour or current_hour < end_hour
+                                                else:  # 당일 근무
+                                                    in_time_range = start_hour <= current_hour < end_hour
+                                                
+                                                if not in_time_range:
+                                                    print(f"  현재 시간({current_hour}시)이 근무 시간({role}) 범위에 없음")
+                                                    # 현재 시간에 해당하지 않으면 DB에서 직접 조회 시도
+                                                    best_match = None
+                                                    exact_match = False
+                                            except:
+                                                pass  # 파싱 오류 시 그대로 진행
                         
                         if date_dept_match and len(matching_schedules) > 0:
                             print(f"날짜와 부서 일치 항목 {len(matching_schedules)}개 발견")

@@ -1292,3 +1292,43 @@ def apply_first_week_schedule(request):
         
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
+
+@login_required
+@require_POST
+@csrf_exempt
+def delete_month_schedule(request, year, month):
+    """특정 월의 모든 스케줄을 삭제"""
+    try:
+        # 관리자만 삭제 가능
+        if not request.user.is_staff:
+            return JsonResponse({'success': False, 'message': '관리자만 삭제할 수 있습니다.'})
+        
+        # 해당 년도와 월의 스케줄 조회
+        start_date = datetime(year, month, 1).date()
+        if month == 12:
+            end_date = datetime(year + 1, 1, 1).date() - timedelta(days=1)
+        else:
+            end_date = datetime(year, month + 1, 1).date() - timedelta(days=1)
+        
+        schedules = Schedule.objects.filter(date__gte=start_date, date__lte=end_date)
+        schedule_count = schedules.count()
+        
+        if schedule_count == 0:
+            return JsonResponse({'success': False, 'message': f'{year}년 {month}월에는 삭제할 스케줄이 없습니다.'})
+        
+        # 스케줄 삭제
+        schedules.delete()
+        
+        print(f"✅ 월별 스케줄 삭제 완료: {year}년 {month}월, {schedule_count}개 스케줄 삭제")
+        
+        return JsonResponse({
+            'success': True, 
+            'message': f'{year}년 {month}월 스케줄 {schedule_count}개가 삭제되었습니다.',
+            'count': schedule_count
+        })
+    
+    except Exception as e:
+        import traceback
+        print(f"❌ 월별 스케줄 삭제 오류: {e}")
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'message': f'삭제 중 오류가 발생했습니다: {str(e)}'})

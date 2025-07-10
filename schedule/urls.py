@@ -32,6 +32,7 @@ urlpatterns = [
     path('ajax/update_schedule/', views.update_schedule, name='update_schedule'),
     path('ajax/update_month_schedule/', views.update_month_schedule, name='update_month_schedule'),
     path('ajax/delete_schedule/', views.delete_schedule, name='delete_schedule'),
+    path('ajax/delete_month_schedule/<int:year>/<int:month>/', views.delete_month_schedule, name='delete_month_schedule'),
     
     # 일정 복사 URL
     path('ajax/copy_schedules_to_next_month/', views.copy_schedules_to_next_month, name='copy_schedules_to_next_month'),

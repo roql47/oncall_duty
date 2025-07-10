@@ -308,6 +308,9 @@
                 <button id="copyPrevMonthBtn" class="btn btn-outline-secondary">
                     <i class="bi bi-calendar-plus"></i> 이전 달 일정 복사
                 </button>
+                <button id="deleteMonthScheduleBtn" class="btn btn-outline-danger">
+                    <i class="bi bi-trash3"></i> 이번 달 일정 삭제
+                </button>
                 {% endif %}
             </div>
         </div>
@@ -940,6 +943,52 @@ $(document).ready(function() {
         });
     }
     
+    // 이번 달 스케줄 삭제 버튼 클릭 이벤트
+    $('#deleteMonthScheduleBtn').on('click', function(e) {
+        e.preventDefault();
+        
+        const currentYear = parseInt('{{ year }}');
+        const currentMonth = parseInt('{{ month }}');
+        
+        if (confirm(`⚠️ 경고: ${currentYear}년 ${currentMonth}월의 모든 스케줄이 삭제됩니다.\n\n정말로 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) {
+            const $btn = $(this);
+            const originalText = $btn.html();
+            
+            // 로딩 표시
+            $btn.html('<span class="spinner-border spinner-border-sm me-2"></span>삭제 중...');
+            $btn.prop('disabled', true);
+            
+            $.ajax({
+                url: '{% url "schedule:delete_month_schedule" year=year month=month %}',
+                type: 'POST',
+                data: {
+                    'csrfmiddlewaretoken': '{{ csrf_token }}'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        alert(`✅ 성공: ${response.message}`);
+                        // 페이지 새로고침
+                        location.reload();
+                    } else {
+                        alert('❌ 오류: ' + response.message);
+                    }
+                },
+                error: function(xhr) {
+                    let errorMessage = '서버 오류가 발생했습니다.';
+                    if (xhr.responseJSON && xhr.responseJSON.message) {
+                        errorMessage = xhr.responseJSON.message;
+                    }
+                    alert('❌ 오류: ' + errorMessage);
+                },
+                complete: function() {
+                    // 로딩 표시 해제
+                    $btn.html(originalText);
+                    $btn.prop('disabled', false);
+                }
+            });
+        }
+    });
+
     // 첫 주 스케줄 일괄 적용 아이콘 클릭 이벤트
     $(document).on('click', '.apply-first-week-icon', function(e) {
         e.stopPropagation();
