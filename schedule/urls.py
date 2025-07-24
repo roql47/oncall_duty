@@ -40,4 +40,11 @@ urlpatterns = [
     
     # 첫 주 일괄 적용 URL
     path('ajax/apply_first_week_schedule/', views.apply_first_week_schedule, name='apply_first_week_schedule'),
+    
+    # 챗봇
+    path('chatbot/', views.chatbot_view, name='chatbot'),
+    
+    # 로그 뷰어  
+    path('logs/', views.log_viewer, name='log_viewer'),
+    path('api/logs/', views.api_logs, name='api_logs'),
 ] 

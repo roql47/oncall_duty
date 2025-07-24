@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os
+from datetime import datetime
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -26,7 +27,29 @@ SECRET_KEY = 'django-insecure-sod4s*2$x(3cwow6)nx4u$sqd7qw2i@h(jvpp_ymkjtm21d2rg
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+# 외부 접속을 허용하기 위한 설정 (개발 환경에서만 사용)
+ALLOWED_HOSTS = ['*']
+
+# 외부 접속 시 CSRF 설정
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost',
+    'http://127.0.0.1',
+    'http://localhost:*',
+    'http://127.0.0.1:*'
+]
+
+# 외부 접속 시 CORS 설정
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+]
+
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
 
 
 # Application definition
@@ -38,11 +61,15 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',  # CORS 지원 추가
     'schedule',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # CORS 미들웨어 추가 (최상단에 위치)
+    'schedule.middleware.RequestLoggingMiddleware',  # 요청 로깅 미들웨어 추가
+    'schedule.middleware.SecurityLoggingMiddleware',  # 보안 로깅 미들웨어 추가
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -125,3 +152,123 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# 외부 접속을 위한 동적 설정
+import socket
+
+def get_local_ip():
+    """현재 시스템의 IP 주소 반환"""
+    try:
+        # 임시 소켓을 만들어서 로컬 IP 주소 확인
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except:
+        return "127.0.0.1"
+
+# 현재 IP 주소 가져오기
+LOCAL_IP = get_local_ip()
+
+# 동적 CSRF 신뢰 도메인 설정
+CSRF_TRUSTED_ORIGINS.extend([
+    f'http://{LOCAL_IP}',
+    f'http://{LOCAL_IP}:80',
+    f'http://{LOCAL_IP}:8000',
+    f'http://{LOCAL_IP}:8080',
+    f'http://{LOCAL_IP}:3000',
+])
+
+# 동적 CORS 허용 도메인 설정
+CORS_ALLOWED_ORIGINS.extend([
+    f"http://{LOCAL_IP}:3000",
+    f"http://{LOCAL_IP}:8000",
+    f"http://{LOCAL_IP}:8080",
+    f"http://{LOCAL_IP}",
+])
+
+# 추가 보안 설정 (개발 환경용)
+SECURE_CROSS_ORIGIN_OPENER_POLICY = None
+SECURE_REFERRER_POLICY = None
+
+# 세션 설정
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False
+
+# 디버그 모드에서 CSRF 검증 완화
+if DEBUG:
+    CSRF_COOKIE_HTTPONLY = False
+    CSRF_USE_SESSIONS = False
+
+print(f"🌐 외부 접속 설정 완료 - 현재 IP: {LOCAL_IP}")
+print(f"🔒 CSRF 신뢰 도메인: {CSRF_TRUSTED_ORIGINS}")
+print(f"🔄 CORS 허용 도메인: {CORS_ALLOWED_ORIGINS}")
+
+# 로깅 설정
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+        'json': {
+            '()': 'logs.logging_config.CustomJSONFormatter',
+        },
+    },
+    'handlers': {
+        'django_file': {
+            'level': 'INFO',
+            'class': 'logs.logging_config.TimedRotatingFileHandlerWithCleanup',
+            'filename': os.path.join(BASE_DIR, 'logs', 'django', 'debug', f'django_debug_{datetime.now().strftime("%Y-%m-%d")}.log'),
+            'when': 'midnight',
+            'interval': 1,
+            'backupCount': 30,
+            'formatter': 'json',
+            'encoding': 'utf-8',
+        },
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+    },
+    'root': {
+        'handlers': ['django_file', 'console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['django_file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['django_file', 'console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'django.db.backends': {
+            'handlers': ['django_file'],
+            'level': 'DEBUG' if DEBUG else 'INFO',
+            'propagate': False,
+        },
+    },
+}
+
+# 로깅 시스템 시작 로그 기록
+try:
+    from logs.logging_config import log_system_startup
+    log_system_startup('Django', '5.2')
+except Exception as e:
+    print(f"⚠️ 로깅 시스템 초기화 중 오류: {e}")
+
+print("📝 Django 로깅 시스템이 설정되었습니다.")

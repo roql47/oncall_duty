@@ -3,7 +3,7 @@
 
 {% block title %}{{ year }}년 {{ month }}월 당직 일정 - 당직 스케줄 시스템{% endblock %}
 
-{% block styles %}
+{% block extra_css %}
 <style>
     body {
         overflow-x: hidden;
@@ -25,27 +25,33 @@
         table-layout: fixed;
         border-collapse: collapse;
         width: auto;
-        min-width: 2500px;
+        min-width: 2000px; /* 기존 2500px에서 축소 */
+        font-size: 13px; /* 전체 폰트 크기 증가 (11px -> 13px) */
     }
     
     .schedule-table th, .schedule-table td {
         border: 1px solid #dee2e6;
-        padding: 12px 10px;
+        padding: 8px 6px; /* 패딩 조금 증가 (6px 5px -> 8px 6px) */
         text-align: center;
         white-space: nowrap;
+        font-size: 13px; /* 셀 폰트 크기 증가 (11px -> 13px) */
     }
     
     .department-col {
-        min-width: 150px;
+        min-width: 120px; /* 기존 150px에서 축소 */
         position: sticky;
         left: 0;
         background-color: #f8f9fa;
         z-index: 1;
         box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1);
+        font-size: 12px; /* 부서명 폰트 크기 증가 (10px -> 12px) */
+        padding: 6px 4px; /* 부서 컬럼 패딩 증가 (4px 3px -> 6px 4px) */
     }
     
     .date-col {
-        min-width: 180px;
+        min-width: 100px; /* 기존 180px에서 대폭 축소 */
+        font-size: 12px; /* 날짜 폰트 크기 증가 (10px -> 12px) */
+        padding: 6px 4px; /* 날짜 컬럼 패딩 증가 (4px 3px -> 6px 4px) */
     }
     
     /* 스크롤바 스타일 커스터마이징 */
@@ -78,16 +84,19 @@
     
     .schedule-item {
         background-color: #e3f2fd;
-        padding: 5px;
-        margin-bottom: 5px;
-        border-radius: 3px;
+        padding: 5px 25px 5px 6px; /* 우측에 아이콘 공간 확보, 좌측 패딩 증가 */
+        margin-bottom: 3px; /* 마진 증가 (2px -> 3px) */
+        border-radius: 3px; /* 둥근 모서리 증가 (2px -> 3px) */
         position: relative;
+        font-size: 11px; /* 스케줄 아이템 폰트 크기 증가 (9px -> 11px) */
+        line-height: 1.2; /* 줄 간격 조정 */
+        min-height: 40px; /* 최소 높이 설정으로 아이콘 공간 확보 */
     }
     
     .admin-controls {
         display: flex;
         justify-content: center;
-        margin-top: 5px;
+        margin-top: 2px;
     }
     
     .success-flash {
@@ -102,38 +111,61 @@
     
     .delete-schedule {
         position: absolute;
-        top: 2px;
-        right: 2px;
+        top: 1px;
+        right: 1px;
         color: #dc3545;
         cursor: pointer;
-        font-size: 0.8rem;
+        font-size: 0.75rem;
+        background: rgba(255, 255, 255, 0.8);
+        border-radius: 2px;
+        padding: 1px 3px;
+        line-height: 1;
     }
     
     .delete-schedule:hover {
         color: #c82333;
+        background: rgba(255, 255, 255, 0.95);
     }
     
     .change-doctor {
         position: absolute;
-        top: 2px;
-        right: 20px;
+        top: 1px;
+        right: 18px;
         color: #0d6efd;
         cursor: pointer;
-        font-size: 0.8rem;
+        font-size: 0.7rem;
+        background: rgba(255, 255, 255, 0.8);
+        border-radius: 2px;
+        padding: 1px 2px;
+        line-height: 1;
     }
     
     .change-doctor:hover {
         color: #0b5ed7;
+        background: rgba(255, 255, 255, 0.95);
     }
     
     .add-schedule-btn {
-        width: 28px;
-        height: 28px;
+        width: 24px;
+        height: 24px;
         padding: 0;
         display: flex;
         justify-content: center;
         align-items: center;
-        border-radius: 50%;
+        border-radius: 4px;
+        font-size: 10px;
+        border-width: 1px;
+        transition: all 0.15s ease;
+        color: #6c757d;
+        border-color: #dee2e6;
+        background-color: transparent;
+    }
+    
+    .add-schedule-btn:hover {
+        transform: scale(1.05);
+        color: #495057;
+        border-color: #adb5bd;
+        background-color: #f8f9fa;
     }
     
     .mini-modal {
@@ -163,6 +195,21 @@
         border-left: 8px solid transparent;
         border-right: 8px solid transparent;
         border-top: 8px solid white;
+    }
+    
+    /* 맨 위칸용 모달 (아래쪽에서 나타남) */
+    .mini-modal.show-below {
+        bottom: auto;
+        top: 100%;
+        margin-bottom: 0;
+        margin-top: 8px;
+    }
+    
+    .mini-modal.show-below:after {
+        bottom: auto;
+        top: -8px;
+        border-top: none;
+        border-bottom: 8px solid white;
     }
     
     .mini-modal .form-label {
@@ -227,41 +274,52 @@
     /* 스케줄 아이템 구조 */
     .schedule-item {
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: 5px;
+        flex-direction: column;
+        position: relative;
+        gap: 2px;
+        justify-content: flex-start;
     }
     
     .time-info {
-        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
         font-weight: bold;
+        height: 16px;
+        font-size: 11px;
+        margin-bottom: 2px;
     }
     
     .doctor-info {
-        flex: 1;
-        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        margin-right: 25px; /* 아이콘 공간 확보 */
+        gap: 1px;
     }
     
     .doctor-name {
-        display: block;
+        display: flex;
+        align-items: center;
+        font-size: 11px; /* 의사 이름 폰트 크기 명시적 설정 */
+        height: 14px;
+        line-height: 1;
     }
     
-    .contact-info {
-        display: block;
-        font-size: 0.8em;
-        color: #666;
-    }
-    
-    .phone-number {
-        font-size: 0.8em;
+    .schedule-item .contact-info,
+    .schedule-item .phone-number {
+        display: flex !important;
+        align-items: center;
+        font-size: 10px; /* 연락처 폰트 크기 증가 (0.8em -> 10px) */
+        color: #6c757d !important; /* text-muted와 동일한 색상 */
+        height: 12px;
+        line-height: 1;
     }
     
     /* 스케줄 셀 스타일 추가 */
     .schedule-cell {
         min-width: 180px;
         white-space: normal;
-        padding: 8px;
+        padding: 6px;
+        vertical-align: top;
     }
     
     /* 첫 주 일괄 적용 아이콘 스타일 */
@@ -282,112 +340,209 @@
         align-items: center;
         justify-content: space-between;
         white-space: nowrap;
+        padding: 1px; /* 패딩 축소 */
     }
     
     .department-name {
         flex: 1;
         text-overflow: ellipsis;
         overflow: hidden;
+        font-size: 12px; /* 부서명 폰트 크기 증가 (9px -> 12px) */
+        font-weight: 600; /* 굵기 약간 축소 */
     }
+
+/* 인쇄용 스타일 */
+@media print {
+    .print-button-container {
+        display: none !important;
+    }
+    
+    .btn, .navbar, .sidebar, .footer {
+        display: none !important;
+    }
+    
+    .schedule-container {
+        overflow: visible !important;
+        max-height: none !important;
+    }
+    
+    .schedule-table {
+        page-break-inside: avoid;
+        font-size: 10px !important; /* 인쇄 시 폰트 크기 증가 (8px -> 10px) */
+        min-width: auto !important;
+    }
+    
+    .schedule-table th,
+    .schedule-table td {
+        border: 1px solid #000 !important;
+        padding: 3px 4px !important; /* 인쇄 시 패딩 증가 (2px 3px -> 3px 4px) */
+        font-size: 10px !important; /* 인쇄 시 폰트 크기 증가 (8px -> 10px) */
+    }
+    
+    .schedule-table th {
+        background-color: #f8f9fa !important;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+    }
+    
+    .department-col {
+        min-width: 60px !important; /* 인쇄 시 부서명 컬럼 더 축소 */
+        font-size: 9px !important; /* 인쇄용 부서명 폰트 크기 증가 (7px -> 9px) */
+    }
+    
+    .date-col {
+        min-width: 40px !important; /* 인쇄 시 날짜 컬럼 더 축소 */
+        font-size: 9px !important; /* 인쇄용 날짜 폰트 크기 증가 (7px -> 9px) */
+    }
+    
+    .schedule-item {
+        font-size: 8px !important; /* 인쇄용 스케줄 아이템 폰트 크기 증가 (6px -> 8px) */
+        padding: 2px !important; /* 인쇄용 패딩 증가 (1px -> 2px) */
+        margin-bottom: 1px !important;
+    }
+    
+    .department-name {
+        font-size: 8px !important; /* 인쇄용 부서명 폰트 크기 증가 (6px -> 8px) */
+    }
+    
+    .card, .card-body {
+        box-shadow: none !important;
+        border: none !important;
+    }
+    
+    .container-fluid {
+        padding: 0 !important;
+    }
+    
+    /* 페이지 여백 설정 */
+    @page {
+        margin: 1cm;
+        size: A4 landscape;
+    }
+    
+    body {
+        font-size: 12px !important;
+    }
+    
+    .schedule-item {
+        word-break: break-word;
+        line-height: 1.2;
+    }
+    
+    .department-label {
+        font-weight: bold;
+        font-size: 10px !important;
+    }
+    
+    .doctor-name {
+        font-size: 9px !important; /* 인쇄용 의사명 폰트 크기 조정 (11px -> 9px) */
+    }
+    
+    .contact-info {
+        font-size: 8px !important; /* 인쇄용 연락처 폰트 크기 조정 (9px -> 8px) */
+        color: #666 !important;
+    }
+}
 </style>
 {% endblock %}
+
+
 
 {% block content %}
 <div class="row">
     <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1>{{ year }}년 {{ month }}월 당직 일정</h1>
+        <div class="d-flex justify-content-between align-items-center mb-2"> <!-- mb-4에서 mb-2로 축소 -->
+            <h2 class="mb-0" style="font-size: 1.5rem;">{{ year }}년 {{ month }}월 당직 일정</h2> <!-- h1에서 h2로, 크기 축소 -->
             <div class="btn-group">
-                <a href="{% url 'schedule:week_schedule' year=year month=month week=1 %}" class="btn btn-outline-primary">
+                <a href="{% url 'schedule:week_schedule' year=year month=month week=1 %}" class="btn btn-outline-primary btn-sm"> <!-- btn-sm 추가 -->
                     <i class="bi bi-calendar-week"></i> 주간 일정
                 </a>
                 {% if user.is_staff %}
-                <a href="{% url 'schedule:add_schedule' %}" class="btn btn-primary">
-                    <i class="bi bi-plus-circle"></i> 일정 추가
-                </a>
-                <button id="copyPrevMonthBtn" class="btn btn-outline-secondary">
+                <button id="copyPrevMonthBtn" class="btn btn-outline-secondary btn-sm"> <!-- btn-sm 추가 -->
                     <i class="bi bi-calendar-plus"></i> 이전 달 일정 복사
                 </button>
-                <button id="deleteMonthScheduleBtn" class="btn btn-outline-danger">
+                <button id="deleteMonthScheduleBtn" class="btn btn-outline-danger btn-sm"> <!-- btn-sm 추가 -->
                     <i class="bi bi-trash3"></i> 이번 달 일정 삭제
                 </button>
                 {% endif %}
             </div>
         </div>
 
-        <div class="mb-3">
+        <div class="mb-2 d-flex justify-content-between align-items-center flex-wrap"> <!-- mb-3에서 mb-2로, 플렉스 레이아웃 적용 -->
             {% now "Y" as current_year %}
             {% now "m" as current_month %}
             
-            {% with prev_month=month|add:"-1" prev_year=year %}
-                {% if prev_month == 0 %}
-                    {% with prev_month=12 prev_year=year|add:"-1" %}
-                        <a href="{% url 'schedule:month_schedule' year=prev_year month=prev_month %}" class="btn btn-outline-primary me-2">
-                            이전 달
+            <div class="nav-buttons"> <!-- 네비게이션 버튼 그룹 -->
+                {% with prev_month=month|add:"-1" prev_year=year %}
+                    {% if prev_month == 0 %}
+                        {% with prev_month=12 prev_year=year|add:"-1" %}
+                            <a href="{% url 'schedule:month_schedule' year=prev_year month=prev_month %}" class="btn btn-outline-primary btn-sm me-1"> <!-- btn-sm 추가, 마진 축소 -->
+                                <i class="bi bi-chevron-left"></i> 이전 달
+                            </a>
+                        {% endwith %}
+                    {% else %}
+                        <a href="{% url 'schedule:month_schedule' year=prev_year month=prev_month %}" class="btn btn-outline-primary btn-sm me-1"> <!-- btn-sm 추가, 마진 축소 -->
+                            <i class="bi bi-chevron-left"></i> 이전 달
                         </a>
-                    {% endwith %}
-                {% else %}
-                    <a href="{% url 'schedule:month_schedule' year=prev_year month=prev_month %}" class="btn btn-outline-primary me-2">
-                        이전 달
-                    </a>
-                {% endif %}
-            {% endwith %}
-            
-            {% with next_month=month|add:"1" next_year=year %}
-                {% if next_month == 13 %}
-                    {% with next_month=1 next_year=year|add:"1" %}
-                        <a href="{% url 'schedule:month_schedule' year=next_year month=next_month %}" class="btn btn-outline-primary">
-                            다음 달
+                    {% endif %}
+                {% endwith %}
+                
+                {% with next_month=month|add:"1" next_year=year %}
+                    {% if next_month == 13 %}
+                        {% with next_month=1 next_year=year|add:"1" %}
+                            <a href="{% url 'schedule:month_schedule' year=next_year month=next_month %}" class="btn btn-outline-primary btn-sm">
+                                다음 달 <i class="bi bi-chevron-right"></i>
+                            </a>
+                        {% endwith %}
+                    {% else %}
+                        <a href="{% url 'schedule:month_schedule' year=next_year month=next_month %}" class="btn btn-outline-primary btn-sm">
+                            다음 달 <i class="bi bi-chevron-right"></i>
                         </a>
-                    {% endwith %}
-                {% else %}
-                    <a href="{% url 'schedule:month_schedule' year=next_year month=next_month %}" class="btn btn-outline-primary">
-                        다음 달
-                    </a>
-                {% endif %}
-            {% endwith %}
+                    {% endif %}
+                {% endwith %}
+            </div>
             
-            <div class="btn-group ms-2">
-                <a href="{% url 'schedule:week_schedule' year=year month=month week=1 %}" class="btn btn-outline-secondary">1주</a>
-                <a href="{% url 'schedule:week_schedule' year=year month=month week=2 %}" class="btn btn-outline-secondary">2주</a>
-                <a href="{% url 'schedule:week_schedule' year=year month=month week=3 %}" class="btn btn-outline-secondary">3주</a>
-                <a href="{% url 'schedule:week_schedule' year=year month=month week=4 %}" class="btn btn-outline-secondary">4주</a>
+            <div class="btn-group"> <!-- 주간 버튼들 -->
+                <a href="{% url 'schedule:week_schedule' year=year month=month week=1 %}" class="btn btn-outline-secondary btn-sm">1주</a> <!-- btn-sm 추가 -->
+                <a href="{% url 'schedule:week_schedule' year=year month=month week=2 %}" class="btn btn-outline-secondary btn-sm">2주</a>
+                <a href="{% url 'schedule:week_schedule' year=year month=month week=3 %}" class="btn btn-outline-secondary btn-sm">3주</a>
+                <a href="{% url 'schedule:week_schedule' year=year month=month week=4 %}" class="btn btn-outline-secondary btn-sm">4주</a>
                 {% if month == 1 or month == 3 or month == 5 or month == 7 or month == 8 or month == 10 or month == 12 %}
-                <a href="{% url 'schedule:week_schedule' year=year month=month week=5 %}" class="btn btn-outline-secondary">5주</a>
+                <a href="{% url 'schedule:week_schedule' year=year month=month week=5 %}" class="btn btn-outline-secondary btn-sm">5주</a>
                 {% endif %}
             </div>
         </div>
 
-        {% if user.is_staff %}
-        <div class="alert alert-info mb-3">
-            <i class="bi bi-info-circle"></i> 관리자님, 각 칸에서 + 버튼을 클릭하여 일정을 추가하거나 기존 스케줄의 삭제 아이콘(×)을 클릭하여 삭제할 수 있습니다.
-        </div>
-        {% endif %}
+
 
         <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">일정 표</h5>
-                <div class="filter-options mt-2">
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" id="show-work-time" checked>
-                        <label class="form-check-label" for="show-work-time">근무시간</label>
-                    </div>
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" id="show-doctor-name" checked>
+            <div class="card-header py-2"> <!-- 패딩 축소 -->
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">일정 표</h6> <!-- h5에서 h6로 축소 -->
+                    <div class="filter-options">
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="show-work-time" checked>
+                            <label class="form-check-label small" for="show-work-time">근무시간</label> <!-- small 클래스 추가 -->
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="show-doctor-name" checked>
                         <label class="form-check-label" for="show-doctor-name">의사 이름</label>
                     </div>
                     <div class="form-check form-check-inline">
                         <input class="form-check-input" type="checkbox" id="show-phone-number" checked>
                         <label class="form-check-label" for="show-phone-number">연락처</label>
                     </div>
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" id="show-all-days">
-                        <label class="form-check-label" for="show-all-days">전체 스케줄 표시 (스크롤 없이)</label>
-                    </div>
                 </div>
             </div>
             <div class="card-body p-0">
-                <div class="schedule-container">
+                <!-- 프린트 버튼 -->
+<div class="print-button-container" style="margin-bottom: 10px; text-align: right;"> <!-- 마진 축소 -->
+    <button onclick="window.print()" class="btn btn-outline-primary btn-sm" id="print-btn"> <!-- btn-sm 추가 -->
+        <i class="bi bi-printer"></i> 프린트
+    </button>
+</div>
+
+<div class="schedule-container">
                     <table class="schedule-table">
                         <thead>
                             <tr>
@@ -438,7 +593,7 @@
                                                     </div>
                                                     <div class="doctor-info">
                                                         <span class="doctor-name">{{ schedule.doctor.name }}</span>
-                                                        <span class="contact-info d-block text-muted phone-number">{{ schedule.doctor.phone_number }}</span>
+                                                        <span class="contact-info phone-number">{{ schedule.doctor.phone_number }}</span>
                                                     </div>
                                                 </div>
                                             {% endif %}
@@ -447,7 +602,7 @@
                                     
                                     {% if user.is_staff %}
                                     <div class="admin-controls">
-                                        <button class="btn btn-sm btn-outline-primary add-schedule-btn" title="스케줄 추가">
+                                        <button class="btn btn-sm btn-outline-secondary add-schedule-btn" title="스케줄 추가">
                                             <i class="bi bi-plus"></i>
                                         </button>
                                     </div>
@@ -535,9 +690,9 @@ $(document).ready(function() {
     
     $('#show-phone-number').change(function() {
         if($(this).is(':checked')) {
-            $('.phone-number').show();
+            $('.contact-info, .phone-number').show();
         } else {
-            $('.phone-number').hide();
+            $('.contact-info, .phone-number').hide();
         }
     });
     
@@ -546,33 +701,7 @@ $(document).ready(function() {
     $('#show-doctor-name').trigger('change');
     $('#show-phone-number').trigger('change');
     
-    // 전체 스케줄 표시 옵션 처리
-    $('#show-all-days').change(function() {
-        if($(this).is(':checked')) {
-            $('.schedule-container').css({
-                'overflow-x': 'visible',
-                'max-width': 'none'
-            });
-            $('.schedule-table').css({
-                'min-width': '100%',
-                'width': '100%'
-            });
-            adjustCellWidths();
-        } else {
-            $('.schedule-container').css({
-                'overflow-x': 'auto',
-                'max-width': '100%'
-            });
-            $('.schedule-table').css({
-                'min-width': '2500px',
-                'width': 'auto'
-            });
-            resetCellWidths();
-        }
-    });
-    
-    // 페이지 로드 시 show-all-days 체크박스 상태 적용
-    $('#show-all-days').trigger('change');
+
     
     // 이전 달 일정 복사 버튼 클릭 이벤트
     $('#copyPrevMonthBtn').on('click', function() {
@@ -612,22 +741,7 @@ $(document).ready(function() {
             });
         }
     });
-    
-    // 셀 너비 조정 함수
-    function adjustCellWidths() {
-        const numDays = $('.date-col').length;
-        if(numDays > 0) {
-            const availableWidth = $('.schedule-container').width() - 150;
-            const cellWidth = Math.floor(availableWidth / numDays);
-            $('.date-col, .schedule-cell').css('min-width', cellWidth + 'px');
-        }
-    }
-    
-    // 셀 너비 원복 함수
-    function resetCellWidths() {
-        $('.date-col').css('min-width', '180px');
-        $('.schedule-cell').css('min-width', '180px');
-    }
+
     
     // 스케줄 추가 버튼 클릭 시
     $(document).on('click', '.add-schedule-btn', function() {
@@ -646,6 +760,13 @@ $(document).ready(function() {
         
         // 모달을 버튼 위에 추가
         $(this).closest('.admin-controls').prepend(floatingModal);
+        
+        // 맨 위 행인지 확인하고 모달 위치 조정
+        const row = cell.closest('tr');
+        const rowIndex = row.index();
+        if (rowIndex <= 1) { // 헤더 다음의 첫 번째 행 (0: 헤더, 1: 첫 번째 데이터 행)
+            floatingModal.find('.mini-modal').addClass('show-below');
+        }
         
         // 모달 데이터 설정
         const $modal = floatingModal;
@@ -770,6 +891,14 @@ $(document).ready(function() {
         // 모달을 스케줄 아이템 위에 추가
         scheduleItem.prepend(floatingModal);
         
+        // 맨 위 행인지 확인하고 모달 위치 조정
+        const cell = scheduleItem.closest('.schedule-cell');
+        const row = cell.closest('tr');
+        const rowIndex = row.index();
+        if (rowIndex <= 1) { // 헤더 다음의 첫 번째 행 (0: 헤더, 1: 첫 번째 데이터 행)
+            floatingModal.find('.mini-modal').addClass('show-below');
+        }
+        
         // 모달 데이터 설정
         const $modal = floatingModal;
         $modal.find('.mini-modal').data('date', dateStr);
@@ -881,7 +1010,7 @@ $(document).ready(function() {
                                   </div>
                                   <div class="doctor-info">
                                     <span class="doctor-name">${response.doctor.name}</span>
-                                    <span class="contact-info d-block text-muted phone-number">${response.doctor.phone_number}</span>
+                                    <span class="contact-info phone-number">${response.doctor.phone_number}</span>
                                   </div>`);
                         
                         cell.find('.admin-controls').before(scheduleItem);
@@ -893,13 +1022,13 @@ $(document).ready(function() {
                             scheduleItem.find('.doctor-name').hide();
                         }
                         if(!$('#show-phone-number').is(':checked')) {
-                            scheduleItem.find('.phone-number').hide();
+                            scheduleItem.find('.contact-info, .phone-number').hide();
                         }
                     } else {
                         scheduleItem.attr('data-doctor', doctorId);
                         scheduleItem.find('strong').text(workScheduleText);
                         scheduleItem.find('.doctor-name').text(response.doctor.name);
-                        scheduleItem.find('.phone-number').text(response.doctor.phone_number);
+                        scheduleItem.find('.contact-info, .phone-number').text(response.doctor.phone_number);
                     }
                     
                     cell.addClass('success-flash');

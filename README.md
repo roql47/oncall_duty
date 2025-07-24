@@ -28,6 +28,68 @@
 2. **FastAPI 챗봇 서버 (8080 포트)**: 벡터 검색 기반 자연어 질의응답 API 및 기본 챗봇 인터페이스 제공
 3. **React 프론트엔드 (3000 포트)**: 모던 UI/UX를 갖춘 사용자 인터페이스 제공 (개발 모드)
 
+## 서버 실행 방법
+
+### 🚀 전체 시스템 실행 (권장)
+```bash
+# 모든 서버를 한 번에 실행
+start_all.bat
+```
+
+### 🔧 개별 서버 실행
+
+#### FastAPI 챗봇 서버만 실행
+```bash
+# 기본 FastAPI 서버 시작 (권장)
+start_fastapi.bat
+
+# 안전 모드로 시작 (로깅 문제 발생 시)
+start_fastapi_safe.bat
+```
+
+#### Django 서버만 실행
+```bash
+# Django 서버만 실행 (포트 8000)
+python manage.py runserver
+```
+
+#### React 프론트엔드만 실행
+```bash
+# React 개발 서버만 실행 (포트 3000)
+cd frontend
+npm start
+```
+
+### ⚠️ 중요 사항
+- **React 챗봇 사용 시**: FastAPI 서버(8080 포트)가 반드시 실행되어야 합니다.
+- **로딩 문제 해결**: React 앱에서 계속 로딩 중이라면 FastAPI 서버가 실행되지 않았을 가능성이 높습니다.
+- **연결 확인**: http://localhost:8080 에서 FastAPI 서버 상태를 확인할 수 있습니다.
+
+### 🔧 문제 해결
+
+#### React 앱에서 계속 로딩되는 문제
+1. **FastAPI 서버 확인**:
+   - `start_fastapi.bat` 실행
+   - http://localhost:8080/departments 접속하여 서버 응답 확인
+
+2. **로깅 시스템 문제**:
+   - `start_fastapi_safe.bat` 사용 (안전 모드)
+   - 로그 디렉토리 권한 확인: `logs/fastapi/chatbot/`
+
+3. **패키지 설치 문제**:
+   ```bash
+   pip install fastapi uvicorn sentence-transformers faiss-cpu django
+   ```
+
+4. **포트 충돌**:
+   - 다른 프로그램이 8080 포트 사용 중인지 확인
+   - 작업 관리자에서 기존 서버 프로세스 종료
+
+#### 연결 상태 확인 방법
+- **FastAPI 서버**: http://localhost:8080/docs
+- **부서 목록 API**: http://localhost:8080/departments  
+- **React 앱**: http://localhost:3000
+
 ## 챗봇 기능
 
 자연어로 당직 정보를 검색할 수 있는 챗봇 기능을 제공합니다. FAISS 벡터 임베딩 검색 기술을 활용하여 정확한 응답을 제공합니다.
@@ -37,6 +99,34 @@
 - 특정 시간대의 당직 의사 조회 (예: "내일 14시 정형외과 당직의는?")
 - 당직 의사의 연락처 정보 조회 (예: "정형외과 당직의 번호는?")
 - 전체 당직표 조회 (예: "5월 10일 순환기내과 당직표 알려줘")
+
+### 챗봇 로깅 시스템
+
+모든 챗봇 대화는 자동으로 로깅되어 관리 및 분석에 활용됩니다.
+
+#### 로그 저장 위치
+- **기본 로그**: `logs/fastapi/chatbot/fastapi_chatbot_YYYY-MM-DD.log`
+- **대화 상세 로그**: `logs/fastapi/chatbot/conversations_YYYY-MM-DD.json`
+- **대체 로그**: `logs/fastapi/chatbot/fallback_YYYY-MM-DD.txt` (로깅 실패 시)
+
+#### 로깅되는 정보
+- 사용자 질문 및 봇 응답 (개인정보 마스킹 처리)
+- 세션 ID 및 요청 시간
+- 클라이언트 IP 주소 및 브라우저 정보
+- 응답 시간 및 성능 메트릭  
+- 요청 소스 (React 프론트엔드, Django 템플릿 등)
+- 추출된 엔티티 정보 (날짜, 부서명, 역할 등)
+
+#### 개인정보 보호
+- 전화번호, 주민등록번호 등 민감한 정보는 자동으로 마스킹 처리
+- 로그 파일은 30일 후 자동 삭제 (보안 관련 로그는 90일)
+- 로그 접근 권한은 시스템 관리자로 제한
+
+#### 로깅 테스트
+챗봇 로깅이 정상적으로 작동하는지 테스트하려면:
+```bash
+python test_chatbot_logging.py
+```
 
 ### 챗봇 기술 스택
 - FastAPI: 경량 API 서버

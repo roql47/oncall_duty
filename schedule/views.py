@@ -1,4 +1,4 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.views.generic import ListView, DetailView, TemplateView, FormView, CreateView, UpdateView, DeleteView
 from django.db.models import Q
 from django.utils import timezone
@@ -19,6 +19,17 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 import json
 from collections import defaultdict
+from django.contrib import admin
+from django.db import transaction
+from django.http import Http404
+from django.core.paginator import Paginator
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_http_methods
+from datetime import datetime, timedelta, date
+from calendar import monthrange
+import os
+import re
+from pathlib import Path
 
 class HomeView(TemplateView):
     template_name = 'schedule/home.html'
@@ -1332,3 +1343,91 @@ def delete_month_schedule(request, year, month):
         print(f"❌ 월별 스케줄 삭제 오류: {e}")
         traceback.print_exc()
         return JsonResponse({'success': False, 'message': f'삭제 중 오류가 발생했습니다: {str(e)}'})
+
+def chatbot_view(request):
+    """챗봇 페이지"""
+    return render(request, 'schedule/chatbot.html')
+
+@login_required
+def log_viewer(request):
+    """로그 뷰어 페이지"""
+    return render(request, 'schedule/log_viewer.html')
+
+@login_required
+def api_logs(request):
+    """로그 API 엔드포인트"""
+    try:
+        # 파라미터 추출
+        backend = request.GET.get('backend', 'django')
+        log_type = request.GET.get('logType', 'api')  # 파라미터명이 logType으로 전달됨
+        date_str = request.GET.get('date', datetime.now().strftime('%Y-%m-%d'))
+        lines = int(request.GET.get('lines', 50))
+        
+        # 로그 파일 경로 구성
+        project_root = Path(__file__).resolve().parent.parent
+        log_file_path = project_root / 'logs' / backend / log_type / f"{backend}_{log_type}_{date_str}.log"
+        
+        if not log_file_path.exists():
+            return JsonResponse({
+                'success': False,
+                'error': f'로그 파일을 찾을 수 없습니다: {log_file_path.name}'
+            })
+        
+        # 로그 파일 읽기
+        try:
+            with open(log_file_path, 'r', encoding='utf-8') as f:
+                log_lines = f.readlines()
+            
+            # 마지막 N줄만 가져오기
+            if len(log_lines) > lines:
+                log_lines = log_lines[-lines:]
+            
+            # 로그 라인 정리 (개행 문자 제거)
+            log_lines = [line.strip() for line in log_lines if line.strip()]
+            
+            # 파일 통계 계산
+            file_size = log_file_path.stat().st_size
+            
+            # 로그 레벨별 카운트
+            error_count = 0
+            warning_count = 0
+            
+            for line in log_lines:
+                try:
+                    log_data = json.loads(line)
+                    level = log_data.get('level', '').upper()
+                    if level == 'ERROR':
+                        error_count += 1
+                    elif level == 'WARNING':
+                        warning_count += 1
+                except json.JSONDecodeError:
+                    # JSON이 아닌 로그는 건너뛰기
+                    if 'ERROR' in line.upper():
+                        error_count += 1
+                    elif 'WARNING' in line.upper():
+                        warning_count += 1
+            
+            stats = {
+                'total_lines': len(log_lines),
+                'file_size': file_size,
+                'error_count': error_count,
+                'warning_count': warning_count,
+            }
+            
+            return JsonResponse({
+                'success': True,
+                'logs': log_lines,
+                'stats': stats
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'로그 파일 읽기 오류: {str(e)}'
+            })
+            
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'로그 조회 중 오류 발생: {str(e)}'
+        })

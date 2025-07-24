@@ -1,0 +1,432 @@
+{% extends "base.html" %}
+
+{% block title %}로그 뷰어{% endblock %}
+
+{% block extra_css %}
+<style>
+    .log-viewer {
+        font-family: 'Courier New', monospace;
+        background-color: #1e1e1e;
+        color: #d4d4d4;
+        padding: 20px;
+        border-radius: 8px;
+        overflow-x: auto;
+        max-height: 600px;
+        overflow-y: auto;
+        border: 1px solid #444;
+    }
+    
+    .log-line {
+        margin: 2px 0;
+        padding: 4px 8px;
+        border-radius: 4px;
+        white-space: pre-wrap;
+        font-size: 13px;
+    }
+    
+    .log-line:hover {
+        background-color: #2d2d30;
+    }
+    
+    .log-level-INFO { border-left: 3px solid #4CAF50; }
+    .log-level-WARNING { border-left: 3px solid #FF9800; }
+    .log-level-ERROR { border-left: 3px solid #F44336; }
+    .log-level-DEBUG { border-left: 3px solid #2196F3; }
+    .log-level-CRITICAL { border-left: 3px solid #E91E63; }
+    
+    .log-controls {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    
+    .form-row {
+        display: flex;
+        gap: 15px;
+        align-items: end;
+        flex-wrap: wrap;
+    }
+    
+    .form-group {
+        flex: 1;
+        min-width: 150px;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+        color: #333;
+    }
+    
+    .form-control {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+    
+    .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: bold;
+    }
+    
+    .btn-primary {
+        background-color: #007bff;
+        color: white;
+    }
+    
+    .btn-primary:hover {
+        background-color: #0056b3;
+    }
+    
+    .btn-secondary {
+        background-color: #6c757d;
+        color: white;
+    }
+    
+    .btn-secondary:hover {
+        background-color: #545b62;
+    }
+    
+    .stats-card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+    }
+    
+    .stat-item {
+        text-align: center;
+    }
+    
+    .stat-value {
+        font-size: 2em;
+        font-weight: bold;
+        color: #007bff;
+    }
+    
+    .stat-label {
+        color: #666;
+        font-size: 0.9em;
+    }
+    
+    .loading {
+        text-align: center;
+        padding: 40px;
+        color: #666;
+    }
+    
+    .error-message {
+        background-color: #f8d7da;
+        color: #721c24;
+        padding: 10px 15px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+        border: 1px solid #f5c6cb;
+    }
+    
+    .log-meta {
+        font-size: 11px;
+        color: #888;
+        margin-left: 10px;
+    }
+    
+    .auto-refresh {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .auto-refresh input[type="checkbox"] {
+        transform: scale(1.2);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2>📋 로그 뷰어</h2>
+            <p class="text-muted">시스템 로그를 실시간으로 조회하고 분석할 수 있습니다.</p>
+        </div>
+    </div>
+    
+    <!-- 로그 조회 컨트롤 -->
+    <div class="log-controls">
+        <form id="logViewerForm">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="backend">백엔드</label>
+                    <select id="backend" name="backend" class="form-control">
+                        <option value="django">Django</option>
+                        <option value="fastapi">FastAPI</option>
+                        <option value="system">System</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="logType">로그 타입</label>
+                    <select id="logType" name="logType" class="form-control">
+                        <option value="access">Access</option>
+                        <option value="api">API</option>
+                        <option value="chatbot">Chatbot</option>
+                        <option value="error">Error</option>
+                        <option value="debug">Debug</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="date">날짜</label>
+                    <input type="date" id="date" name="date" class="form-control" value="">
+                </div>
+                
+                <div class="form-group">
+                    <label for="lines">라인 수</label>
+                    <select id="lines" name="lines" class="form-control">
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                        <option value="200">200</option>
+                        <option value="500">500</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>&nbsp;</label>
+                    <button type="submit" class="btn btn-primary">로그 조회</button>
+                </div>
+                
+                <div class="form-group">
+                    <label>&nbsp;</label>
+                    <button type="button" id="refreshBtn" class="btn btn-secondary">새로고침</button>
+                </div>
+                
+                <div class="form-group auto-refresh">
+                    <label>
+                        <input type="checkbox" id="autoRefresh"> 자동 새로고침 (30초)
+                    </label>
+                </div>
+            </div>
+        </form>
+    </div>
+    
+    <!-- 통계 카드 -->
+    <div class="stats-card" id="statsCard" style="display: none;">
+        <h5>📊 로그 통계</h5>
+        <div class="stats-grid" id="statsGrid">
+            <!-- 통계 데이터가 여기에 로드됩니다 -->
+        </div>
+    </div>
+    
+    <!-- 로그 내용 -->
+    <div class="log-viewer" id="logContent">
+        <div class="loading">
+            🔍 로그를 조회하려면 위의 조건을 설정하고 "로그 조회" 버튼을 클릭하세요.
+        </div>
+    </div>
+</div>
+
+<script>
+// 오늘 날짜를 기본값으로 설정
+document.getElementById('date').value = new Date().toISOString().split('T')[0];
+
+// 백엔드 변경 시 로그 타입 옵션 업데이트
+document.getElementById('backend').addEventListener('change', function() {
+    const backend = this.value;
+    const logTypeSelect = document.getElementById('logType');
+    
+    // 기존 옵션 제거
+    logTypeSelect.innerHTML = '';
+    
+    let options = [];
+    if (backend === 'system') {
+        options = [
+            {value: 'startup', text: 'Startup'},
+            {value: 'performance', text: 'Performance'},
+            {value: 'security', text: 'Security'}
+        ];
+    } else {
+        options = [
+            {value: 'access', text: 'Access'},
+            {value: 'api', text: 'API'},
+            {value: 'chatbot', text: 'Chatbot'},
+            {value: 'error', text: 'Error'},
+            {value: 'debug', text: 'Debug'}
+        ];
+    }
+    
+    options.forEach(opt => {
+        const option = document.createElement('option');
+        option.value = opt.value;
+        option.textContent = opt.text;
+        logTypeSelect.appendChild(option);
+    });
+});
+
+// 폼 제출 처리
+document.getElementById('logViewerForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    loadLogs();
+});
+
+// 새로고침 버튼
+document.getElementById('refreshBtn').addEventListener('click', function() {
+    loadLogs();
+});
+
+// 자동 새로고침 설정
+let autoRefreshInterval = null;
+document.getElementById('autoRefresh').addEventListener('change', function() {
+    if (this.checked) {
+        autoRefreshInterval = setInterval(loadLogs, 30000); // 30초마다
+    } else {
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+    }
+});
+
+// 로그 로드 함수
+async function loadLogs() {
+    const formData = new FormData(document.getElementById('logViewerForm'));
+    const params = new URLSearchParams();
+    
+    for (let [key, value] of formData.entries()) {
+        params.append(key, value);
+    }
+    
+    const logContent = document.getElementById('logContent');
+    logContent.innerHTML = '<div class="loading">⏳ 로그를 불러오는 중...</div>';
+    
+    try {
+        const response = await fetch(`/schedule/api/logs/?${params.toString()}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            displayLogs(data.logs);
+            displayStats(data.stats);
+        } else {
+            logContent.innerHTML = `<div class="error-message">❌ ${data.error || '로그를 불러올 수 없습니다.'}</div>`;
+        }
+    } catch (error) {
+        console.error('로그 로드 오류:', error);
+        logContent.innerHTML = '<div class="error-message">❌ 네트워크 오류가 발생했습니다.</div>';
+    }
+}
+
+// 로그 표시 함수
+function displayLogs(logs) {
+    const logContent = document.getElementById('logContent');
+    
+    if (!logs || logs.length === 0) {
+        logContent.innerHTML = '<div class="loading">📄 해당 조건의 로그가 없습니다.</div>';
+        return;
+    }
+    
+    const logHtml = logs.map((log, index) => {
+        let logClass = '';
+        let logText = '';
+        let logMeta = '';
+        
+        try {
+            // JSON 로그 파싱 시도
+            const logData = JSON.parse(log);
+            logClass = `log-level-${logData.level || 'INFO'}`;
+            logText = `[${logData.timestamp}] [${logData.level}] ${logData.message}`;
+            
+            // 추가 메타정보 구성
+            const metaItems = [];
+            if (logData.request_id) metaItems.push(`ID: ${logData.request_id.substring(0, 8)}`);
+            if (logData.session_id) metaItems.push(`Session: ${logData.session_id.substring(0, 8)}`);
+            if (logData.ip_address) metaItems.push(`IP: ${logData.ip_address}`);
+            if (logData.response_time) metaItems.push(`${logData.response_time}ms`);
+            if (logData.status_code) metaItems.push(`HTTP ${logData.status_code}`);
+            if (logData.message_length) metaItems.push(`MsgLen: ${logData.message_length}`);
+            if (logData.response_length) metaItems.push(`ResLen: ${logData.response_length}`);
+            
+            if (metaItems.length > 0) {
+                logMeta = `<span class="log-meta">${metaItems.join(' | ')}</span>`;
+            }
+            
+        } catch (e) {
+            // JSON이 아닌 일반 로그
+            logClass = 'log-level-INFO';
+            logText = log;
+        }
+        
+        return `<div class="log-line ${logClass}">${escapeHtml(logText)}${logMeta}</div>`;
+    }).join('');
+    
+    logContent.innerHTML = logHtml;
+    
+    // 스크롤을 맨 아래로
+    logContent.scrollTop = logContent.scrollHeight;
+}
+
+// 통계 표시 함수
+function displayStats(stats) {
+    const statsCard = document.getElementById('statsCard');
+    const statsGrid = document.getElementById('statsGrid');
+    
+    if (!stats) {
+        statsCard.style.display = 'none';
+        return;
+    }
+    
+    const statsHtml = `
+        <div class="stat-item">
+            <div class="stat-value">${stats.total_lines || 0}</div>
+            <div class="stat-label">총 로그 라인</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">${(stats.file_size / (1024 * 1024)).toFixed(2)}MB</div>
+            <div class="stat-label">파일 크기</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">${stats.error_count || 0}</div>
+            <div class="stat-label">에러 수</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value">${stats.warning_count || 0}</div>
+            <div class="stat-label">경고 수</div>
+        </div>
+    `;
+    
+    statsGrid.innerHTML = statsHtml;
+    statsCard.style.display = 'block';
+}
+
+// HTML 이스케이프 함수
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+}
+
+// 초기 로드
+window.addEventListener('load', function() {
+    // 기본적으로 Django API 로그를 오늘 날짜로 로드
+    loadLogs();
+});
+</script>
+{% endblock %} 

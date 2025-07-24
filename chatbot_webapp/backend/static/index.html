@@ -36,15 +36,30 @@
             padding: 10px;
             margin-bottom: 10px;
             border-radius: 5px;
+            position: relative;
+        }
+        .message-content {
+            margin-bottom: 5px;
+        }
+        .message-time {
+            font-size: 11px;
+            color: #666;
+            opacity: 0.7;
         }
         .user-message {
             background-color: #e3f2fd;
             margin-left: 20%;
             text-align: right;
         }
+        .user-message .message-time {
+            text-align: right;
+        }
         .bot-message {
             background-color: #f1f1f1;
             margin-right: 20%;
+        }
+        .bot-message .message-time {
+            text-align: left;
         }
         .input-container {
             display: flex;
@@ -102,9 +117,7 @@
     <div class="container">
         <h1>당직 스케줄 벡터 DB 챗봇</h1>
         <div class="chat-container" id="chat-container">
-            <div class="message bot-message">
-                안녕하세요! 당직 스케줄 챗봇입니다. 어떤 부서의 당직 정보가 필요하신가요?
-            </div>
+            <!-- 초기 메시지는 JavaScript에서 추가됨 -->
         </div>
         <div class="input-container">
             <input type="text" id="message-input" placeholder="메시지를 입력하세요...">
@@ -122,6 +135,7 @@
                 <div class="example" onclick="useExample(this)">내일 외과 수술의 연락처 알려줘</div>
                 <div class="example" onclick="useExample(this)">정형외과 당직의 번호 좀 알려줘</div>
                 <div class="example" onclick="useExample(this)">응급의학과 당직 담당자는?</div>
+                <div class="example" onclick="useExample(this)">지금 순환기내과 병동 당직 누구야?</div>
             </div>
         </div>
     </div>
@@ -136,8 +150,10 @@
             const message = messageInput.value.trim();
             if (!message) return;
 
+            // 사용자 메시지 전송 시간 기록
+            const userMessageTime = new Date();
             // 사용자 메시지 추가
-            addMessage(message, 'user');
+            addMessage(message, 'user', userMessageTime);
             messageInput.value = '';
             
             try {
@@ -155,20 +171,43 @@
                 }
                 
                 const data = await response.json();
+                // 챗봇 응답 받은 시간 기록
+                const botResponseTime = new Date();
                 // 챗봇 응답 추가
-                addMessage(data.answer, 'bot');
+                addMessage(data.answer, 'bot', botResponseTime);
             } catch (error) {
                 console.error('Error:', error);
-                addMessage(`서버와 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요. 오류: ${error.message}`, 'bot');
+                const errorTime = new Date();
+                addMessage(`서버와 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요. 오류: ${error.message}`, 'bot', errorTime);
             }
         }
 
         // 메시지 화면에 추가 함수
-        function addMessage(message, sender) {
+        function addMessage(message, sender, timestamp) {
             const messageElement = document.createElement('div');
             messageElement.classList.add('message');
             messageElement.classList.add(sender === 'user' ? 'user-message' : 'bot-message');
-            messageElement.textContent = message;
+            
+            const messageContent = document.createElement('div');
+            messageContent.classList.add('message-content');
+            messageContent.textContent = message;
+
+            const messageTime = document.createElement('div');
+            messageTime.classList.add('message-time');
+            // 시간 형식을 HH:MM으로 표시
+            const timeString = timestamp ? timestamp.toLocaleTimeString('ko-KR', { 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                hour12: false 
+            }) : new Date().toLocaleTimeString('ko-KR', { 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                hour12: false 
+            });
+            messageTime.textContent = timeString;
+
+            messageElement.appendChild(messageContent);
+            messageElement.appendChild(messageTime);
             
             chatContainer.appendChild(messageElement);
             // 스크롤을 최신 메시지로 내림
@@ -190,6 +229,12 @@
             messageInput.value = element.textContent;
             sendMessage();
         }
+
+        // 페이지 로드 시 초기 메시지 추가
+        document.addEventListener('DOMContentLoaded', function() {
+            const initialTime = new Date();
+            addMessage('안녕하세요! 당직 스케줄 챗봇입니다. 어떤 부서의 당직 정보가 필요하신가요?', 'bot', initialTime);
+        });
     </script>
 </body>
 </html> 

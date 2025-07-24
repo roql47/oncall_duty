@@ -2,6 +2,80 @@
 
 {% block title %}{{ department.name }} {{ year }}년 {{ month }}월 당직 일정 - 당직 스케줄 시스템{% endblock %}
 
+{% block extra_css %}
+<style>
+@media print {
+    .print-button-container {
+        display: none !important;
+    }
+    
+    .btn, .navbar, .sidebar, .footer {
+        display: none !important;
+    }
+    
+    .schedule-container {
+        overflow: visible !important;
+        max-height: none !important;
+    }
+    
+    .schedule-table {
+        page-break-inside: avoid;
+        font-size: 12px !important;
+    }
+    
+    .schedule-table th,
+    .schedule-table td {
+        border: 1px solid #000 !important;
+        padding: 8px !important;
+        font-size: 11px !important;
+    }
+    
+    .schedule-table th {
+        background-color: #f8f9fa !important;
+        -webkit-print-color-adjust: exact;
+    }
+    
+    .card, .card-body {
+        box-shadow: none !important;
+        border: none !important;
+    }
+    
+    .container-fluid {
+        padding: 0 !important;
+    }
+    
+    /* 페이지 여백 설정 */
+    @page {
+        margin: 1cm;
+        size: A4 landscape;
+    }
+    
+    body {
+        font-size: 12px !important;
+    }
+    
+    .schedule-item {
+        word-break: break-word;
+        line-height: 1.2;
+    }
+    
+    .department-label {
+        font-weight: bold;
+        font-size: 10px !important;
+    }
+    
+    .doctor-name {
+        font-size: 11px !important;
+    }
+    
+    .contact-info {
+        font-size: 9px !important;
+        color: #666 !important;
+    }
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row">
     <div class="col-md-12">
@@ -109,6 +183,13 @@
                         vertical-align: middle;
                     }
                 </style>
+                <!-- 프린트 버튼 -->
+                <div class="print-button-container" style="margin-bottom: 20px; text-align: right;">
+                    <button onclick="window.print()" class="btn btn-outline-primary" id="print-btn">
+                        <i class="fas fa-print"></i> 프린트
+                    </button>
+                </div>
+                
                 <div class="table-responsive">
                     <table class="schedule-table">
                         <thead>

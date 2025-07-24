@@ -2,101 +2,546 @@
 
 {% block title %}{{ doctor.name }} {{ year }}년 {{ month }}월 당직 일정 - 당직 스케줄 시스템{% endblock %}
 
+{% block extra_css %}
+<style>
+/* 컴팩트한 레이아웃 */
+.compact-header {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    color: white;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.compact-header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.doctor-info-compact {
+    background: #f8f9fa;
+    padding: 0.75rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+
+.doctor-info-compact .info-item {
+    display: inline-block;
+    margin-right: 1.5rem;
+    margin-bottom: 0.25rem;
+}
+
+.view-toggle {
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.view-toggle .btn {
+    margin: 0 0.25rem;
+    font-size: 0.85rem;
+    padding: 0.375rem 1rem;
+}
+
+/* 컴팩트 테이블 스타일 */
+.compact-table {
+    font-size: 0.85rem;
+    margin-bottom: 0;
+}
+
+.compact-table th,
+.compact-table td {
+    padding: 0.4rem 0.6rem;
+    vertical-align: middle;
+    border: 1px solid #e9ecef;
+}
+
+.compact-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-align: center;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.compact-table tr {
+    transition: background-color 0.2s ease;
+}
+
+.compact-table tr:hover {
+    background-color: #f5f5f5;
+}
+
+.compact-table .weekend {
+    background-color: #fff3cd;
+}
+
+.compact-table .on-call {
+    background-color: #f8d7da;
+    font-weight: 500;
+}
+
+.compact-table .on-call td {
+    border-color: #dc3545;
+}
+
+/* 캘린더 뷰 스타일 */
+.calendar-view {
+    display: none;
+}
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    background: #e9ecef;
+    border-radius: 8px;
+    padding: 2px;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.calendar-header {
+    background: #007bff;
+    color: white;
+    padding: 0.5rem;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+
+.calendar-cell {
+    background: white;
+    min-height: 60px;
+    padding: 0.25rem;
+    border-radius: 4px;
+    position: relative;
+    font-size: 0.75rem;
+}
+
+.calendar-cell.other-month {
+    background: #f8f9fa;
+    color: #6c757d;
+}
+
+.calendar-cell.weekend {
+    background: #fff3cd;
+}
+
+.calendar-cell.has-schedule {
+    background: #d1ecf1;
+    border: 2px solid #17a2b8;
+}
+
+.calendar-cell.on-call {
+    background: #f8d7da;
+    border: 2px solid #dc3545;
+}
+
+.calendar-date {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.calendar-schedule {
+    font-size: 0.65rem;
+    line-height: 1.2;
+    word-break: break-word;
+}
+
+.calendar-badge {
+    display: inline-block;
+    padding: 0.1rem 0.3rem;
+    border-radius: 10px;
+    font-size: 0.6rem;
+    font-weight: 500;
+    margin-top: 0.1rem;
+}
+
+.badge-oncall {
+    background: #dc3545;
+    color: white;
+}
+
+.badge-regular {
+    background: #28a745;
+    color: white;
+}
+
+/* 내비게이션 버튼 컴팩트화 */
+.nav-buttons {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.nav-buttons .btn {
+    font-size: 0.85rem;
+    padding: 0.375rem 0.75rem;
+}
+
+/* 인쇄 스타일 최적화 */
+@media print {
+    .print-button-container, .view-toggle, .nav-buttons {
+        display: none !important;
+    }
+    
+    .compact-header {
+        background: #007bff !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    
+    .compact-table {
+        font-size: 0.75rem;
+    }
+    
+    .compact-table th,
+    .compact-table td {
+        padding: 0.3rem 0.4rem;
+        border: 1px solid #000 !important;
+    }
+    
+    .compact-table .weekend {
+        background-color: #fff3cd !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    
+    .compact-table .on-call {
+        background-color: #f8d7da !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    
+    .calendar-grid {
+        font-size: 0.7rem;
+    }
+    
+    .calendar-cell {
+        min-height: 50px;
+        border: 1px solid #000 !important;
+    }
+    
+    .calendar-cell.weekend {
+        background-color: #fff3cd !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    
+    .calendar-cell.on-call {
+        background-color: #f8d7da !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
+
+/* 반응형 디자인 */
+@media (max-width: 768px) {
+    .compact-header h1 {
+        font-size: 1.25rem;
+    }
+    
+    .doctor-info-compact .info-item {
+        display: block;
+        margin-right: 0;
+        margin-bottom: 0.5rem;
+    }
+    
+    .nav-buttons {
+        justify-content: center;
+    }
+    
+    .calendar-grid {
+        font-size: 0.7rem;
+    }
+    
+    .calendar-cell {
+        min-height: 50px;
+    }
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="row">
-    <div class="col-md-12">
-        <h1 class="mb-4">{{ doctor.name }} - {{ year }}년 {{ month }}월 일정</h1>
-
-        <div class="mb-3">
-            <a href="{% url 'schedule:department_schedule' department_id=doctor.department.id year=year month=month %}" class="btn btn-outline-secondary me-2">
-                {{ doctor.department.name }} 일정으로
-            </a>
-            
-            {% with prev_month=month|add:"-1" prev_year=year %}
-                {% if prev_month == 0 %}
-                    {% with prev_month=12 prev_year=year|add:"-1" %}
-                        <a href="{% url 'schedule:doctor_schedule' doctor_id=doctor.id year=prev_year month=prev_month %}" class="btn btn-outline-primary me-2">
-                            이전 달
-                        </a>
-                    {% endwith %}
-                {% else %}
-                    <a href="{% url 'schedule:doctor_schedule' doctor_id=doctor.id year=prev_year month=prev_month %}" class="btn btn-outline-primary me-2">
-                        이전 달
-                    </a>
-                {% endif %}
-            {% endwith %}
-            
-            {% with next_month=month|add:"1" next_year=year %}
-                {% if next_month == 13 %}
-                    {% with next_month=1 next_year=year|add:"1" %}
-                        <a href="{% url 'schedule:doctor_schedule' doctor_id=doctor.id year=next_year month=next_month %}" class="btn btn-outline-primary">
-                            다음 달
-                        </a>
-                    {% endwith %}
-                {% else %}
-                    <a href="{% url 'schedule:doctor_schedule' doctor_id=doctor.id year=next_year month=next_month %}" class="btn btn-outline-primary">
-                        다음 달
-                    </a>
-                {% endif %}
-            {% endwith %}
-        </div>
-
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0">의사 정보</h5>
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- 컴팩트 헤더 -->
+            <div class="compact-header">
+                <h1>{{ doctor.name }} - {{ year }}년 {{ month }}월 일정</h1>
             </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <p><strong>이름:</strong> {{ doctor.name }}</p>
-                        <p><strong>부서:</strong> {{ doctor.department.name }}</p>
-                        <p><strong>연락처:</strong> {{ doctor.phone_number }}</p>
+
+            <!-- 의사 정보 컴팩트 -->
+            <div class="doctor-info-compact">
+                <div class="info-item">
+                    <i class="bi bi-person-badge"></i> <strong>{{ doctor.name }}</strong>
+                </div>
+                <div class="info-item">
+                    <i class="bi bi-building"></i> {{ doctor.department.name }}
+                </div>
+                <div class="info-item">
+                    <i class="bi bi-telephone"></i> {{ doctor.phone_number }}
+                </div>
+            </div>
+
+            <!-- 내비게이션 버튼 -->
+            <div class="nav-buttons">
+                <div>
+                    <a href="{% url 'schedule:department_schedule' department_id=doctor.department.id year=year month=month %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> {{ doctor.department.name }} 일정
+                    </a>
+                </div>
+                
+                <div>
+                    {% with prev_month=month|add:"-1" prev_year=year %}
+                        {% if prev_month == 0 %}
+                            {% with prev_month=12 prev_year=year|add:"-1" %}
+                                <a href="{% url 'schedule:doctor_schedule' doctor_id=doctor.id year=prev_year month=prev_month %}" class="btn btn-outline-primary">
+                                    <i class="bi bi-chevron-left"></i> 이전 달
+                                </a>
+                            {% endwith %}
+                        {% else %}
+                            <a href="{% url 'schedule:doctor_schedule' doctor_id=doctor.id year=prev_year month=prev_month %}" class="btn btn-outline-primary">
+                                <i class="bi bi-chevron-left"></i> 이전 달
+                            </a>
+                        {% endif %}
+                    {% endwith %}
+                    
+                    {% with next_month=month|add:"1" next_year=year %}
+                        {% if next_month == 13 %}
+                            {% with next_month=1 next_year=year|add:"1" %}
+                                <a href="{% url 'schedule:doctor_schedule' doctor_id=doctor.id year=next_year month=next_month %}" class="btn btn-outline-primary">
+                                    다음 달 <i class="bi bi-chevron-right"></i>
+                                </a>
+                            {% endwith %}
+                        {% else %}
+                            <a href="{% url 'schedule:doctor_schedule' doctor_id=doctor.id year=next_year month=next_month %}" class="btn btn-outline-primary">
+                                다음 달 <i class="bi bi-chevron-right"></i>
+                            </a>
+                        {% endif %}
+                    {% endwith %}
+                </div>
+                
+                <div class="print-button-container">
+                    <button onclick="window.print()" class="btn btn-outline-success">
+                        <i class="bi bi-printer"></i> 인쇄
+                    </button>
+                </div>
+            </div>
+
+            <!-- 뷰 전환 버튼 -->
+            <div class="view-toggle">
+                <button class="btn btn-primary btn-sm" id="tableViewBtn" onclick="showTableView()">
+                    <i class="bi bi-table"></i> 테이블 뷰
+                </button>
+                <button class="btn btn-outline-primary btn-sm" id="calendarViewBtn" onclick="showCalendarView()">
+                    <i class="bi bi-calendar-month"></i> 캘린더 뷰
+                </button>
+            </div>
+
+            <!-- 테이블 뷰 -->
+            <div class="table-view" id="tableView">
+                <div class="card shadow-sm">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table compact-table mb-0">
+                                <thead>
+                                    <tr>
+                                        <th style="min-width: 60px;">날짜</th>
+                                        <th style="min-width: 50px;">요일</th>
+                                        <th style="min-width: 120px;">근무시간</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for schedule in schedules %}
+                                    <tr class="{% if schedule.date.weekday == 5 or schedule.date.weekday == 6 %}weekend{% endif %} {% if schedule.is_on_call %}on-call{% endif %}">
+                                        <td class="text-center">
+                                            <strong>{{ schedule.date|date:"d" }}</strong>
+                                        </td>
+                                        <td class="text-center">
+                                            {% if schedule.date.weekday == 5 %}
+                                                <span class="text-primary">토</span>
+                                            {% elif schedule.date.weekday == 6 %}
+                                                <span class="text-danger">일</span>
+                                            {% else %}
+                                                {{ schedule.date|date:"D"|upper }}
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            <small>{{ schedule.work_schedule }}</small>
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="3" class="text-center text-muted py-4">
+                                            <i class="bi bi-calendar-x"></i> 등록된 일정이 없습니다.
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">{{ year }}년 {{ month }}월 일정</h5>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="schedule-table">
-                        <thead>
-                            <tr>
-                                <th>날짜</th>
-                                <th>요일</th>
-                                <th>근무시간</th>
-                                <th>당직 여부</th>
-                                <th>비고</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for schedule in schedules %}
-                            <tr class="{% if schedule.date.weekday == 5 or schedule.date.weekday == 6 %}weekend{% endif %} {% if schedule.is_on_call %}on-call{% endif %}">
-                                <td>{{ schedule.date|date:"d" }}</td>
-                                <td>{{ schedule.date|date:"D"|upper }}</td>
-                                <td>{{ schedule.work_schedule }}</td>
-                                <td>
-                                    {% if schedule.is_on_call %}
-                                    <span class="badge bg-danger">당직</span>
-                                    {% else %}
-                                    -
-                                    {% endif %}
-                                </td>
-                                <td>{{ schedule.note|default:"-" }}</td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="5">등록된 일정이 없습니다.</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+            <!-- 캘린더 뷰 -->
+            <div class="calendar-view" id="calendarView">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="calendar-grid" 
+                             data-year="{{ year }}" 
+                             data-month="{{ month }}">
+                            <!-- 요일 헤더 -->
+                            <div class="calendar-header">일</div>
+                            <div class="calendar-header">월</div>
+                            <div class="calendar-header">화</div>
+                            <div class="calendar-header">수</div>
+                            <div class="calendar-header">목</div>
+                            <div class="calendar-header">금</div>
+                            <div class="calendar-header">토</div>
+                            
+                            <!-- 캘린더 셀들 - JavaScript로 동적 생성 -->
+                            {% comment %}
+                            <!-- 이 부분은 JavaScript에서 동적으로 생성됩니다 -->
+                            {% endcomment %}
+                        </div>
+                    </div>
                 </div>
             </div>
+            
+            <!-- 스케줄 데이터를 JSON으로 저장 (JavaScript에서 사용) -->
+            <script type="application/json" id="schedule-data">
+            [
+                {% for schedule in schedules %}
+                {
+                    "date": {{ schedule.date.day }},
+                    "workSchedule": "{{ schedule.work_schedule|escapejs }}",
+                    "isOnCall": {{ schedule.is_on_call|yesno:"true,false" }},
+                    "note": "{{ schedule.note|default:""|escapejs }}"
+                }{% if not forloop.last %},{% endif %}
+                {% endfor %}
+            ]
+            </script>
+
+
         </div>
     </div>
 </div>
+
+<script>
+// 뷰 전환 기능
+function showTableView() {
+    document.getElementById('tableView').style.display = 'block';
+    document.getElementById('calendarView').style.display = 'none';
+    document.getElementById('tableViewBtn').className = 'btn btn-primary btn-sm';
+    document.getElementById('calendarViewBtn').className = 'btn btn-outline-primary btn-sm';
+    localStorage.setItem('doctorScheduleView', 'table');
+}
+
+function showCalendarView() {
+    document.getElementById('tableView').style.display = 'none';
+    document.getElementById('calendarView').style.display = 'block';
+    document.getElementById('tableViewBtn').className = 'btn btn-outline-primary btn-sm';
+    document.getElementById('calendarViewBtn').className = 'btn btn-primary btn-sm';
+    generateCalendar();
+    localStorage.setItem('doctorScheduleView', 'calendar');
+}
+
+// 캘린더 생성
+function generateCalendar() {
+    // 캘린더 그리드에서 데이터 읽기
+    const calendarGrid = document.querySelector('.calendar-grid');
+    const year = parseInt(calendarGrid.dataset.year);
+    const month = parseInt(calendarGrid.dataset.month);
+    
+    // JSON 스크립트에서 스케줄 데이터 읽기
+    const scheduleDataElement = document.getElementById('schedule-data');
+    const schedules = scheduleDataElement ? JSON.parse(scheduleDataElement.textContent) : [];
+    
+    // 기존 날짜 셀들 제거 (헤더는 유지)
+    const cells = calendarGrid.querySelectorAll('.calendar-cell');
+    cells.forEach(cell => cell.remove());
+    
+    // 달의 첫 번째 날과 마지막 날 계산
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+    const firstDayWeek = firstDay.getDay();
+    const daysInMonth = lastDay.getDate();
+    
+    // 이전 달의 날짜들 추가
+    const prevMonth = new Date(year, month - 2, 0);
+    const prevMonthDays = prevMonth.getDate();
+    
+    for (let i = firstDayWeek - 1; i >= 0; i--) {
+        const cell = createCalendarCell(prevMonthDays - i, true, null);
+        calendarGrid.appendChild(cell);
+    }
+    
+    // 현재 달의 날짜들 추가
+    for (let day = 1; day <= daysInMonth; day++) {
+        const scheduleData = schedules.find(s => s.date === day);
+        const dayOfWeek = new Date(year, month - 1, day).getDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const cell = createCalendarCell(day, false, scheduleData, isWeekend);
+        calendarGrid.appendChild(cell);
+    }
+    
+    // 다음 달의 날짜들 추가 (42개 셀을 채우기 위해)
+    const totalCells = calendarGrid.children.length - 7; // 헤더 7개 제외
+    const remainingCells = 42 - totalCells;
+    
+    for (let day = 1; day <= remainingCells; day++) {
+        const cell = createCalendarCell(day, true, null);
+        calendarGrid.appendChild(cell);
+    }
+}
+
+function createCalendarCell(day, isOtherMonth, scheduleData, isWeekend = false) {
+    const cell = document.createElement('div');
+    cell.className = 'calendar-cell';
+    
+    if (isOtherMonth) {
+        cell.className += ' other-month';
+    } else if (isWeekend) {
+        cell.className += ' weekend';
+    }
+    
+    if (scheduleData) {
+        cell.className += ' has-schedule';
+        if (scheduleData.isOnCall) {
+            cell.className += ' on-call';
+        }
+    }
+    
+    let cellContent = `<div class="calendar-date">${day}</div>`;
+    
+    if (scheduleData && !isOtherMonth) {
+        cellContent += `<div class="calendar-schedule">${scheduleData.workSchedule}</div>`;
+        
+        // 당직일 경우에만 배지 표시
+        if (scheduleData.isOnCall) {
+            cellContent += `<div class="calendar-badge badge-oncall">당직</div>`;
+        }
+    }
+    
+    cell.innerHTML = cellContent;
+    return cell;
+}
+
+// 페이지 로드 시 저장된 뷰 복원
+document.addEventListener('DOMContentLoaded', function() {
+    const savedView = localStorage.getItem('doctorScheduleView');
+    if (savedView === 'calendar') {
+        showCalendarView();
+    } else {
+        showTableView();
+    }
+});
+</script>
 {% endblock %} 

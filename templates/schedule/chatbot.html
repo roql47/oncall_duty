@@ -1,1 +1,399 @@
- 
+{% extends "base.html" %}
+
+{% block title %}당직 챗봇{% endblock %}
+
+{% block extra_css %}
+<style>
+    .chat-container {
+        max-width: 800px;
+        margin: 0 auto;
+        height: 70vh;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        overflow: hidden;
+        background: white;
+    }
+    
+    .chat-header {
+        background: linear-gradient(135deg, #007bff, #0056b3);
+        color: white;
+        padding: 15px 20px;
+        text-align: center;
+        font-weight: bold;
+    }
+    
+    .chat-messages {
+        flex: 1;
+        padding: 20px;
+        overflow-y: auto;
+        background: #f8f9fa;
+    }
+    
+    .message {
+        margin-bottom: 15px;
+        display: flex;
+        align-items: flex-start;
+    }
+    
+    .message.user {
+        justify-content: flex-end;
+    }
+    
+    .message.bot {
+        justify-content: flex-start;
+    }
+    
+    .message-content {
+        max-width: 70%;
+        padding: 12px 16px;
+        border-radius: 18px;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+    
+    .message.user .message-content {
+        background: #007bff;
+        color: white;
+        border-bottom-right-radius: 4px;
+    }
+    
+    .message.bot .message-content {
+        background: white;
+        color: #333;
+        border: 1px solid #e0e0e0;
+        border-bottom-left-radius: 4px;
+    }
+    
+    .message-avatar {
+        width: 35px;
+        height: 35px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        margin: 0 10px;
+        flex-shrink: 0;
+    }
+    
+    .message.user .message-avatar {
+        background: #007bff;
+        color: white;
+        order: 2;
+    }
+    
+    .message.bot .message-avatar {
+        background: #28a745;
+        color: white;
+    }
+    
+    .chat-input-container {
+        padding: 20px;
+        background: white;
+        border-top: 1px solid #e0e0e0;
+    }
+    
+    .chat-input-group {
+        display: flex;
+        gap: 10px;
+    }
+    
+    .chat-input {
+        flex: 1;
+        border: 1px solid #ddd;
+        border-radius: 25px;
+        padding: 12px 20px;
+        font-size: 14px;
+        outline: none;
+    }
+    
+    .chat-input:focus {
+        border-color: #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+    
+    .chat-send-btn {
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 45px;
+        height: 45px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background-color 0.2s;
+    }
+    
+    .chat-send-btn:hover {
+        background: #0056b3;
+    }
+    
+    .chat-send-btn:disabled {
+        background: #6c757d;
+        cursor: not-allowed;
+    }
+    
+    .typing-indicator {
+        display: none;
+        padding: 10px 15px;
+        background: white;
+        border-radius: 18px;
+        border: 1px solid #e0e0e0;
+        margin-bottom: 15px;
+        max-width: 70%;
+    }
+    
+    .typing-dots {
+        display: flex;
+        gap: 4px;
+    }
+    
+    .typing-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #999;
+        animation: typing 1.5s infinite ease-in-out;
+    }
+    
+    .typing-dot:nth-child(2) {
+        animation-delay: 0.2s;
+    }
+    
+    .typing-dot:nth-child(3) {
+        animation-delay: 0.4s;
+    }
+    
+    @keyframes typing {
+        0%, 60%, 100% {
+            transform: translateY(0);
+            opacity: 0.5;
+        }
+        30% {
+            transform: translateY(-10px);
+            opacity: 1;
+        }
+    }
+    
+    .welcome-message {
+        text-align: center;
+        color: #666;
+        padding: 40px 20px;
+        border-radius: 8px;
+        background: white;
+        margin: 20px;
+    }
+    
+    .example-questions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: center;
+        margin-top: 20px;
+    }
+    
+    .example-btn {
+        background: #f8f9fa;
+        border: 1px solid #e0e0e0;
+        border-radius: 20px;
+        padding: 8px 16px;
+        cursor: pointer;
+        font-size: 13px;
+        transition: all 0.2s;
+    }
+    
+    .example-btn:hover {
+        background: #e9ecef;
+        border-color: #007bff;
+        color: #007bff;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2 class="text-center mb-4">🤖 당직 챗봇</h2>
+            <p class="text-center text-muted mb-4">당직 관련 궁금한 것을 물어보세요!</p>
+        </div>
+    </div>
+    
+    <div class="chat-container">
+        <div class="chat-header">
+            <i class="bi bi-robot"></i> 당직 안내 챗봇
+        </div>
+        
+        <div class="chat-messages" id="chatMessages">
+            <div class="welcome-message">
+                <h5>👋 안녕하세요!</h5>
+                <p>당직 관련 정보를 도와드리겠습니다.<br>
+                아래 예시 질문을 클릭하거나 직접 질문해주세요.</p>
+                
+                <div class="example-questions">
+                    <div class="example-btn" onclick="sendExampleQuestion('오늘 순환기내과 당직 누구야?')">
+                        오늘 순환기내과 당직 누구야?
+                    </div>
+                    <div class="example-btn" onclick="sendExampleQuestion('내일 응급의학과 당직의 연락처')">
+                        내일 응급의학과 당직의 연락처
+                    </div>
+                    <div class="example-btn" onclick="sendExampleQuestion('어떤 과가 있어?')">
+                        어떤 과가 있어?
+                    </div>
+                    <div class="example-btn" onclick="sendExampleQuestion('지금 당직의 누구야?')">
+                        지금 당직의 누구야?
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="typing-indicator" id="typingIndicator">
+            <div class="message bot">
+                <div class="message-avatar">🤖</div>
+                <div class="typing-dots">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="chat-input-container">
+            <div class="chat-input-group">
+                <input type="text" id="chatInput" class="chat-input" 
+                       placeholder="예: 오늘 순환기내과 당직 누구야?" 
+                       onkeypress="handleKeyPress(event)">
+                <button id="sendButton" class="chat-send-btn" onclick="sendMessage()">
+                    <i class="bi bi-send"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 챗봇 메시지 관리
+let messageHistory = [];
+
+// 메시지 전송 함수
+async function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const message = input.value.trim();
+    
+    if (!message) return;
+    
+    // 사용자 메시지 추가
+    addMessage(message, 'user');
+    input.value = '';
+    
+    // 버튼 비활성화
+    const sendButton = document.getElementById('sendButton');
+    sendButton.disabled = true;
+    
+    // 타이핑 인디케이터 표시
+    showTypingIndicator();
+    
+    try {
+        // FastAPI 백엔드로 요청 전송
+        const response = await fetch('http://localhost:8080/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ message: message })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // 타이핑 인디케이터 숨기기
+        hideTypingIndicator();
+        
+        // 봇 응답 추가
+        addMessage(data.answer || '죄송합니다. 응답을 생성할 수 없습니다.', 'bot');
+        
+    } catch (error) {
+        console.error('Error:', error);
+        hideTypingIndicator();
+        
+        // 에러 메시지 표시
+        addMessage('죄송합니다. 서버와 연결할 수 없습니다. 잠시 후 다시 시도해주세요.', 'bot');
+    } finally {
+        // 버튼 다시 활성화
+        sendButton.disabled = false;
+    }
+}
+
+// 메시지 추가 함수
+function addMessage(content, sender) {
+    const messagesContainer = document.getElementById('chatMessages');
+    const welcomeMessage = messagesContainer.querySelector('.welcome-message');
+    
+    // 첫 메시지인 경우 환영 메시지 숨기기
+    if (welcomeMessage) {
+        welcomeMessage.style.display = 'none';
+    }
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${sender}`;
+    
+    const avatar = document.createElement('div');
+    avatar.className = 'message-avatar';
+    avatar.textContent = sender === 'user' ? '👤' : '🤖';
+    
+    const messageContent = document.createElement('div');
+    messageContent.className = 'message-content';
+    messageContent.textContent = content;
+    
+    messageDiv.appendChild(avatar);
+    messageDiv.appendChild(messageContent);
+    
+    messagesContainer.appendChild(messageDiv);
+    
+    // 메시지 히스토리에 추가
+    messageHistory.push({ content, sender, timestamp: new Date() });
+    
+    // 스크롤을 맨 아래로
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+// 예시 질문 전송
+function sendExampleQuestion(question) {
+    document.getElementById('chatInput').value = question;
+    sendMessage();
+}
+
+// Enter 키 처리
+function handleKeyPress(event) {
+    if (event.key === 'Enter') {
+        sendMessage();
+    }
+}
+
+// 타이핑 인디케이터 표시/숨기기
+function showTypingIndicator() {
+    const indicator = document.getElementById('typingIndicator');
+    indicator.style.display = 'block';
+    
+    const messagesContainer = document.getElementById('chatMessages');
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+function hideTypingIndicator() {
+    const indicator = document.getElementById('typingIndicator');
+    indicator.style.display = 'none';
+}
+
+// 페이지 로드 시 입력창에 포커스
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('chatInput').focus();
+});
+</script>
+{% endblock %} 
