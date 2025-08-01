@@ -5,7 +5,7 @@ echo ============================================
 echo.
 
 echo 📂 디렉토리 이동 중...
-cd /d "C:\Users\emr4\Desktop\oncall_project\chatbot_webapp\backend"
+cd /d "%~dp0..\..\chatbot_webapp\backend"
 
 echo 📋 필수 패키지 확인 중...
 python -c "import fastapi, uvicorn, faiss, sentence_transformers; print('✅ 필수 패키지가 모두 설치되어 있습니다.')" 2>nul

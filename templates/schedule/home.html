@@ -35,17 +35,6 @@
                         <li><a class="dropdown-item" href="{% url 'schedule:week_schedule' year=current_year month=current_month week=1 %}"><i class="bi bi-calendar-week"></i> 주간 일정</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item" href="{% url 'schedule:quick_add_schedule' %}"><i class="bi bi-lightning"></i> 빠른 추가</a></li>
-                        <li><a class="dropdown-item" href="{% url 'schedule:batch_upload' %}"><i class="bi bi-file-excel"></i> 일괄 업로드</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item" href="{% url 'schedule:work_hours_calendar' %}">
-                            <i class="bi bi-clock"></i> 근무시간 관리
-                        </a></li>
-                        {% if user.is_staff %}
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item" href="{% url 'schedule:admin_schedule_edit' %}">
-                            <i class="bi bi-pencil-square"></i> 관리자용 일정 편집
-                        </a></li>
-                        {% endif %}
                     </ul>
                 </div>
                 {% else %}

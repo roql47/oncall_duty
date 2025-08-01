@@ -24,6 +24,7 @@ from django.db import transaction
 from django.http import Http404
 from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
+from django.contrib.admin.views.decorators import staff_member_required
 from django.views.decorators.http import require_http_methods
 from datetime import datetime, timedelta, date
 from calendar import monthrange
@@ -1348,12 +1349,12 @@ def chatbot_view(request):
     """챗봇 페이지"""
     return render(request, 'schedule/chatbot.html')
 
-@login_required
+@staff_member_required
 def log_viewer(request):
-    """로그 뷰어 페이지"""
+    """로그 뷰어 페이지 (관리자 전용)"""
     return render(request, 'schedule/log_viewer.html')
 
-@login_required
+@staff_member_required
 def api_logs(request):
     """로그 API 엔드포인트"""
     try:
@@ -1365,7 +1366,7 @@ def api_logs(request):
         
         # 로그 파일 경로 구성
         project_root = Path(__file__).resolve().parent.parent
-        log_file_path = project_root / 'logs' / backend / log_type / f"{backend}_{log_type}_{date_str}.log"
+        log_file_path = project_root / 'logs' / backend / log_type / f"{backend}_{log_type}_{date_str}.txt"
         
         if not log_file_path.exists():
             return JsonResponse({

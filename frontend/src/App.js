@@ -53,9 +53,8 @@ function App() {
     message: ''
   });
   const [polling, setPolling] = useState(false);
-  const [activeTab, setActiveTab] = useState('chat'); // 새로운 상태 추가
-  const [vectorInfo, setVectorInfo] = useState(null);
-  const [vectorLoading, setVectorLoading] = useState(false);
+
+
   const [departments, setDepartments] = useState([]);
   const [departmentsLoading, setDepartmentsLoading] = useState(false);
   const [apiConnectionError, setApiConnectionError] = useState(false);
@@ -91,8 +90,8 @@ function App() {
     '오늘 순환기내과 당직 누구야?',
     '내일 외과 당직의 연락처 알려줘',
     '정형외과 당직의 번호는?',
-    '응급의학과 당직 일정 알려줘',
-    '지금 순환기내과 병동 당직 누구야?'
+    '지금 순환기내과 병동 당직 누구야?',
+    '조준환 교수님 당직 언제야?'
   ];
 
   useEffect(() => {
@@ -120,6 +119,8 @@ function App() {
       '당직', '의사', '병원', '스케줄', '일정', '연락처', '번호', 
       '순환기내과', '외과', '정형외과', '응급의학과', '내과', '소아과',
       '오늘', '내일', '명일', '익일', '모레', '어제', '글피', '누구', '언제', '몇시', '시간',
+      // 개인별 스케줄 관련 키워드 추가
+      '교수', '교수님', '선생님', '며칠', '몇일', '근무',
       // 주차 관련 키워드 추가
       '이번주', '다음주', '다다음주', '저번주', '지난주',
       '월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일',
@@ -387,7 +388,7 @@ function App() {
       ];
       
       if (noResultKeywords.some(keyword => response.includes(keyword))) {
-        const enhancedResponse = `${response}\n\n💡 다시 시도해보세요:\n• 구체적인 날짜를 포함해서 질문\n• 정확한 과명을 포함해서 질문\n• "벡터 DB 업데이트" 버튼을 눌러 최신 정보 반영`;
+        const enhancedResponse = `${response}\n\n💡 다시 시도해보세요:\n\n📅 날짜를 명확히 해주세요:\n• "7월 25일 순환기내과 당직 누구야?"\n• "오늘 외과 당직의 연락처는?"\n• "내일 정형외과 당직 누구인가요?"\n\n🏥 정확한 과명을 사용해주세요:\n• 순환기내과, 외과, 정형외과, 응급의학과\n• 소아과, 내과, 산부인과, 신경외과\n• 우측 진료과 목록을 참고하세요\n\n🔄 최신 정보 업데이트:\n• "DB 업데이트" 버튼을 눌러 최신 스케줄 반영\n• 새로 추가된 당직 정보 확인\n\n📝 질문 예시:\n• "지금 순환기내과 병동 당직 누구야?"\n• "2025년 7월 25일 외과 수술의 연락처 알려줘"\n• "내일 응급의학과 당직의 번호는?"`;
         setMessages(msgs => [...msgs, { from: 'bot', text: enhancedResponse, timestamp: new Date() }]);
       } else {
         setMessages(msgs => [...msgs, { from: 'bot', text: response, timestamp: new Date() }]);
@@ -521,37 +522,7 @@ function App() {
     sendMessage(question);
   };
 
-  // 벡터 정보 가져오기
-  const fetchVectorInfo = async () => {
-    setVectorLoading(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/vector-info`);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      const data = await response.json();
-      setVectorInfo(data);
-      // API 연결 성공 시 연결 오류 상태 해제
-      setApiConnectionError(false);
-      setRetryCount(0);
-    } catch (error) {
-      console.error('벡터 정보 조회 오류:', error);
-      setApiConnectionError(true);
-      const errorMsg = error.message.includes('fetch') 
-        ? 'FastAPI 서버에 연결할 수 없습니다.'
-        : `벡터 정보를 가져올 수 없습니다: ${error.message}`;
-      setVectorInfo({
-        status: 'error',
-        message: errorMsg,
-        total_vectors: 0,
-        departments: {},
-        date_range: {},
-        roles: {}
-      });
-    } finally {
-      setVectorLoading(false);
-    }
-  };
+
 
   // 부서 목록 가져오기
   const fetchDepartments = async () => {
@@ -588,46 +559,9 @@ function App() {
     await fetchDepartments();
   };
 
-  // 벡터 DB 삭제
-  // eslint-disable-next-line no-unused-vars
-  const deleteVectorDB = async () => {
-    if (!window.confirm('정말로 벡터 DB를 삭제하시겠습니까?\n\n⚠️ 주의사항:\n- 벡터 DB만 삭제되고 실제 스케줄 데이터는 유지됩니다\n- 챗봇 기능을 다시 사용하려면 벡터 DB 업데이트가 필요합니다\n- 이 작업은 되돌릴 수 없습니다')) {
-      return;
-    }
 
-    setVectorLoading(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/vector-db`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      const data = await response.json();
-      
-      if (data.status === 'success') {
-        alert('✅ ' + data.message);
-        // 벡터 정보 새로고침
-        fetchVectorInfo();
-      } else {
-        alert('❌ 삭제 실패: ' + data.message);
-      }
-    } catch (error) {
-      console.error('벡터 DB 삭제 오류:', error);
-      alert('❌ 벡터 DB 삭제 중 오류가 발생했습니다: ' + error.message);
-    } finally {
-      setVectorLoading(false);
-    }
-  };
 
-  // 탭 전환
-  const handleTabChange = (tab) => {
-    setActiveTab(tab);
-    if (tab === 'vectors' && !vectorInfo) {
-      fetchVectorInfo();
-    }
-  };
+
 
 
 
@@ -643,8 +577,7 @@ function App() {
         <ul className="nav-menu">
           <li className="nav-item">
             <button 
-              className={`nav-button ${activeTab === 'chat' ? 'active' : ''}`}
-              onClick={() => handleTabChange('chat')}
+              className="nav-button active"
             >
               <svg viewBox="0 0 24 24" fill="currentColor">
                 <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
@@ -652,24 +585,13 @@ function App() {
               <span>채팅</span>
             </button>
           </li>
-          <li className="nav-item">
-            <button 
-              className={`nav-button ${activeTab === 'vectors' ? 'active' : ''}`}
-              onClick={() => handleTabChange('vectors')}
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor">
-                <path d="M4 7v10c0 2.21 1.79 4 4 4h8c2.21 0 4-1.79 4-4V7c0-2.21-1.79-4-4-4H8c-2.21 0-4 1.79-4 4zm4 0h8v2H8V7zm0 4h8v2H8v-2zm0 4h5v2H8v-2z"/>
-              </svg>
-              <span>벡터 정보</span>
-            </button>
-          </li>
+
         </ul>
       </div>
 
       {/* 메인 컨텐츠 */}
       <div className="main-content">
-        {activeTab === 'chat' && (
-          <>
+        <>
             <div className="chat-header">
               <div className="header-title">
                 💬 당직 스케줄 챗봇
@@ -831,129 +753,8 @@ function App() {
               </button>
             </div>
           </>
-        )}
 
-        {activeTab === 'vectors' && (
-          <div className="vector-info-container">
-            <div className="vector-header">
-              <div className="header-title">
-                📊 벡터 DB 정보
-              </div>
-              <div className="vector-actions">
-                <button 
-                  onClick={fetchVectorInfo}
-                  className="refresh-button"
-                  disabled={vectorLoading}
-                >
-                  {vectorLoading ? '새로고침 중...' : '새로고침'}
-                </button>
-                <button 
-                  onClick={deleteVectorDB}
-                  className="delete-button"
-                  disabled={vectorLoading}
-                >
-                  🗑️ DB 삭제
-                </button>
-              </div>
-            </div>
 
-            {vectorLoading ? (
-              <div className="loading-container">
-                <div className="loading-spinner"></div>
-                <p>벡터 정보를 불러오는 중...</p>
-              </div>
-            ) : vectorInfo ? (
-              <div className="vector-info-content">
-                {vectorInfo.status === 'error' ? (
-                  <div className="error-container">
-                    <h3>❌ 오류</h3>
-                    <p>{vectorInfo.message}</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="stats-grid">
-                      <div className="stat-card">
-                        <h3>총 벡터 수</h3>
-                        <div className="stat-number">{vectorInfo.total_vectors?.toLocaleString()}</div>
-                      </div>
-                      <div className="stat-card">
-                        <h3>메타데이터 수</h3>
-                        <div className="stat-number">{vectorInfo.total_metadata?.toLocaleString()}</div>
-                      </div>
-                      <div className="stat-card">
-                        <h3>스케줄 ID 수</h3>
-                        <div className="stat-number">{vectorInfo.total_schedule_ids?.toLocaleString()}</div>
-                      </div>
-                      <div className="stat-card">
-                        <h3>벡터 차원</h3>
-                        <div className="stat-number">{vectorInfo.vector_dim}</div>
-                      </div>
-                    </div>
-
-                    {vectorInfo.date_range && Object.keys(vectorInfo.date_range).length > 0 && (
-                      <div className="info-section">
-                        <h3>📅 날짜 범위</h3>
-                        <div className="date-info">
-                          <p><strong>시작일:</strong> {vectorInfo.date_range.earliest}</p>
-                          <p><strong>종료일:</strong> {vectorInfo.date_range.latest}</p>
-                          <p><strong>총 일수:</strong> {vectorInfo.date_range.total_days}일</p>
-                        </div>
-                      </div>
-                    )}
-
-                    {vectorInfo.departments && Object.keys(vectorInfo.departments).length > 0 && (
-                      <div className="info-section">
-                        <h3>🏥 부서별 통계</h3>
-                        <div className="departments-grid">
-                          {Object.entries(vectorInfo.departments).map(([dept, count]) => (
-                            <div key={dept} className="department-item">
-                              <span className="department-name">{dept}</span>
-                              <span className="department-count">{count}개</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {vectorInfo.roles && Object.keys(vectorInfo.roles).length > 0 && (
-                      <div className="info-section">
-                        <h3>👨‍⚕️ 역할별 통계</h3>
-                        <div className="roles-grid">
-                          {Object.entries(vectorInfo.roles).slice(0, 10).map(([role, count]) => (
-                            <div key={role} className="role-item">
-                              <span className="role-name">{role}</span>
-                              <span className="role-count">{count}개</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {vectorInfo.recent_schedules && vectorInfo.recent_schedules.length > 0 && (
-                      <div className="info-section">
-                        <h3>🕒 최근 추가된 스케줄</h3>
-                        <div className="recent-schedules">
-                          {vectorInfo.recent_schedules.map((schedule, idx) => (
-                            <div key={idx} className="schedule-item">
-                              <div className="schedule-date">{schedule.date}</div>
-                              <div className="schedule-department">{schedule.department}</div>
-                              <div className="schedule-role">{schedule.role}</div>
-                              <div className="schedule-name">{schedule.name}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className="empty-state">
-                <p>벡터 정보를 불러오려면 새로고침 버튼을 클릭하세요.</p>
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* 우측 사이드바 */}

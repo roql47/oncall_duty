@@ -17,21 +17,21 @@ echo 🔧 외부 접속용 설정으로 전체 시스템 시작 중... (백그�
 echo.
 
 echo [1/4] Django 서버 시작 중... (모든 호스트 허용)
-powershell -Command "Start-Process -FilePath 'cmd' -ArgumentList '/c', 'chcp 65001 >nul && python manage.py runserver 0.0.0.0:8000' -WindowStyle Hidden"
+powershell -Command "Start-Process -FilePath 'cmd' -ArgumentList '/k', 'chcp 65001 >nul && cd /d \"%~dp0..\..\" && python manage.py runserver 0.0.0.0:8000' -WindowStyle Hidden"
 echo ✅ Django 서버 시작됨 (숨김 모드)
 
 echo 잠시 대기 중...
 timeout /t 5 /nobreak >nul
 
 echo [2/4] FastAPI 챗봇 서버 시작 중... (모든 호스트 허용)
-powershell -Command "Start-Process -FilePath 'cmd' -ArgumentList '/c', 'chcp 65001 >nul && cd chatbot_webapp\backend && uvicorn main:app --host 0.0.0.0 --port 8080 --reload' -WindowStyle Hidden"
+powershell -Command "Start-Process -FilePath 'cmd' -ArgumentList '/k', 'chcp 65001 >nul && cd /d \"%~dp0..\..\\chatbot_webapp\\backend\" && uvicorn main:app --host 0.0.0.0 --port 8080 --reload' -WindowStyle Hidden"
 echo ✅ FastAPI 서버 시작됨 (숨김 모드)
 
 echo 잠시 대기 중...
 timeout /t 5 /nobreak >nul
 
 echo [3/4] React 프론트엔드 시작 중... (localhost + nginx 프록시)
-powershell -Command "Start-Process -FilePath 'cmd' -ArgumentList '/c', 'chcp 65001 >nul && cd frontend && npm start' -WindowStyle Hidden"
+powershell -Command "Start-Process -FilePath 'cmd' -ArgumentList '/k', 'chcp 65001 >nul && cd /d \"%~dp0..\..\\frontend\" && npm start' -WindowStyle Hidden"
 echo ✅ React 프론트엔드 시작됨 (숨김 모드)
 
 echo 잠시 대기 중... (백엔드 서비스 완전 시작 대기)

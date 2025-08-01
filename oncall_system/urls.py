@@ -17,9 +17,19 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.views.generic import RedirectView
+from django.contrib.auth import views as auth_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('schedule/', include('schedule.urls')),
     path('', RedirectView.as_view(pattern_name='schedule:home'), name='home'),
+    
+    # Django 기본 인증 시스템 URL
+    path('accounts/login/', auth_views.LoginView.as_view(
+        template_name='registration/login.html',
+        next_page='schedule:home'
+    ), name='login'),
+    path('accounts/logout/', auth_views.LogoutView.as_view(
+        next_page='schedule:home'
+    ), name='logout'),
 ]

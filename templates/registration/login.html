@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+
+{% block title %}로그인{% endblock %}
+
+{% block extra_css %}
+<style>
+    .login-container {
+        max-width: 400px;
+        margin: 50px auto;
+        padding: 30px;
+        background-color: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .login-header {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+    
+    .login-header i {
+        font-size: 3rem;
+        color: #0d6efd;
+        margin-bottom: 10px;
+    }
+    
+    .form-control:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+    }
+    
+    .btn-login {
+        width: 100%;
+        padding: 12px;
+        font-size: 16px;
+        font-weight: 600;
+    }
+    
+    .login-footer {
+        text-align: center;
+        margin-top: 20px;
+        color: #6c757d;
+        font-size: 14px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="login-header">
+        <i class="bi bi-shield-lock"></i>
+        <h2>시스템 로그인</h2>
+        <p class="text-muted">당직 스케줄 시스템에 로그인하세요</p>
+    </div>
+    
+    {% if form.errors %}
+        <div class="alert alert-danger" role="alert">
+            <i class="bi bi-exclamation-triangle"></i>
+            <strong>로그인 실패!</strong>
+            {% for field, errors in form.errors.items %}
+                {% for error in errors %}
+                    <div>{{ error }}</div>
+                {% endfor %}
+            {% endfor %}
+        </div>
+    {% endif %}
+    
+    {% if next %}
+        <div class="alert alert-info" role="alert">
+            <i class="bi bi-info-circle"></i>
+            로그인이 필요한 페이지입니다.
+        </div>
+    {% endif %}
+    
+    <form method="post" action="{% url 'login' %}">
+        {% csrf_token %}
+        
+        <div class="mb-3">
+            <label for="id_username" class="form-label">
+                <i class="bi bi-person"></i> 사용자명
+            </label>
+            <input type="text" 
+                   class="form-control" 
+                   name="username" 
+                   id="id_username" 
+                   value="{{ form.username.value|default:'' }}"
+                   placeholder="사용자명을 입력하세요"
+                   required 
+                   autofocus>
+        </div>
+        
+        <div class="mb-4">
+            <label for="id_password" class="form-label">
+                <i class="bi bi-lock"></i> 비밀번호
+            </label>
+            <input type="password" 
+                   class="form-control" 
+                   name="password" 
+                   id="id_password"
+                   placeholder="비밀번호를 입력하세요"
+                   required>
+        </div>
+        
+        <input type="hidden" name="next" value="{{ next }}">
+        
+        <button type="submit" class="btn btn-primary btn-login">
+            <i class="bi bi-box-arrow-in-right"></i> 로그인
+        </button>
+    </form>
+    
+    <div class="login-footer">
+        <small>
+            <i class="bi bi-info-circle"></i>
+            관리자 계정으로 로그인하시면 모든 기능을 사용할 수 있습니다.
+        </small>
+    </div>
+</div>
+{% endblock %} 

@@ -272,3 +272,8 @@ except Exception as e:
     print(f"⚠️ 로깅 시스템 초기화 중 오류: {e}")
 
 print("📝 Django 로깅 시스템이 설정되었습니다.")
+
+# 인증 관련 설정
+LOGIN_URL = '/accounts/login/'
+LOGIN_REDIRECT_URL = '/schedule/'
+LOGOUT_REDIRECT_URL = '/schedule/'

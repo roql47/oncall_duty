@@ -1,1 +1,0 @@
-Start-Process -FilePath "start_all_external.bat" -WindowStyle Hidden 

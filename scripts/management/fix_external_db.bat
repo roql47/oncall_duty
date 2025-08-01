@@ -46,11 +46,11 @@ echo 잠시 대기...
 timeout /t 3 /nobreak >nul
 
 echo Django 서버 시작 중...
-start "Django External" cmd /k "python manage.py runserver 0.0.0.0:8000"
+start "Django External" cmd /k "cd /d "%~dp0..\.." && python manage.py runserver 0.0.0.0:8000"
 timeout /t 5 /nobreak >nul
 
 echo FastAPI 서버 시작 중...
-start "FastAPI External" cmd /k "cd chatbot_webapp\backend && uvicorn main:app --host 0.0.0.0 --port 8080 --reload"
+start "FastAPI External" cmd /k "cd /d "%~dp0..\..\chatbot_webapp\backend" && uvicorn main:app --host 0.0.0.0 --port 8080 --reload"
 timeout /t 5 /nobreak >nul
 
 echo React 서버 시작 중...

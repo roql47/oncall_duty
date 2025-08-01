@@ -41,7 +41,7 @@ if "%1"=="" (
 echo 🔧 로그 관리 스크립트 실행 중...
 echo.
 
-python logs/log_manager.py %*
+python "%SCRIPT_DIR%..\..\logs\log_manager.py" %*
 
 if %ERRORLEVEL% NEQ 0 (
     echo.

@@ -65,6 +65,29 @@
             border: none;
             box-shadow: 0 4px 6px rgba(0,0,0,.1);
         }
+        
+        /* 로그아웃 버튼 스타일 */
+        .logout-form {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        
+        .logout-btn {
+            border: none !important;
+            background: none !important;
+            width: 100% !important;
+            text-align: left !important;
+            padding: 0.25rem 1rem !important;
+            color: #212529 !important;
+            text-decoration: none !important;
+            display: block !important;
+            cursor: pointer !important;
+        }
+        
+        .logout-btn:hover {
+            background-color: #f8f9fa !important;
+            color: #1e2125 !important;
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -99,22 +122,13 @@
                     </li>
 
                     
-                    <!-- 관리 메뉴 드롭다운 -->
+                    <!-- 관리 메뉴 드롭다운 (관리자만) -->
+                    {% if user.is_staff %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-gear"></i> 관리
                         </a>
                         <ul class="dropdown-menu" aria-labelledby="adminDropdown">
-                            <li><a class="dropdown-item" href="{% url 'schedule:admin_schedule_edit' %}">
-                                <i class="bi bi-list-ul"></i> 일정 관리
-                            </a></li>
-                            <li><a class="dropdown-item" href="{% url 'schedule:work_schedule_list' %}">
-                                <i class="bi bi-clock"></i> 근무시간 관리
-                            </a></li>
-                            <li><a class="dropdown-item" href="{% url 'schedule:batch_upload' %}">
-                                <i class="bi bi-upload"></i> 배치 업로드
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{% url 'schedule:log_viewer' %}">
                                 <i class="bi bi-file-text"></i> 로그 뷰어
                             </a></li>
@@ -123,10 +137,48 @@
                             </a></li>
                         </ul>
                     </li>
+                    {% endif %}
+                </ul>
+                
+                <!-- 사용자 인증 메뉴 -->
+                <ul class="navbar-nav">
+                    {% if user.is_authenticated %}
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-person-circle"></i> {{ user.username }}
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                                <li><h6 class="dropdown-header">
+                                    <i class="bi bi-person"></i> {{ user.get_full_name|default:user.username }}
+                                </h6></li>
+                                <li><hr class="dropdown-divider"></li>
+                                {% if user.is_staff %}
+                                <li><small class="dropdown-item-text text-muted">
+                                    <i class="bi bi-shield-check"></i> 관리자 권한
+                                </small></li>
+                                <li><hr class="dropdown-divider"></li>
+                                {% endif %}
+                                <li>
+                                    <form method="post" action="{% url 'logout' %}" class="logout-form">
+                                        {% csrf_token %}
+                                        <button type="submit" class="logout-btn">
+                                            <i class="bi bi-box-arrow-right"></i> 로그아웃
+                                        </button>
+                                    </form>
+                                </li>
+                            </ul>
+                        </li>
+                    {% else %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'login' %}">
+                                <i class="bi bi-box-arrow-in-right"></i> 로그인
+                            </a>
+                        </li>
+                    {% endif %}
                 </ul>
                 
                 <!-- 현재 날짜 표시 -->
-                <div class="current-date">
+                <div class="current-date ms-3">
                     <i class="bi bi-calendar-date"></i>
                     <span id="currentDate"></span>
                 </div>
@@ -152,12 +204,12 @@
     <!-- 푸터 -->
     <footer class="text-center text-muted">
         <div class="container">
-            <p>&copy; 2024 당직 시스템. 모든 권리 보유.</p>
+            <p>&copy; 2025 중앙대학교광명병원. All rights reserved.</p>
             <p>
                 <small>
                     <i class="bi bi-info-circle"></i>
                     Django + FastAPI 기반 당직 관리 시스템
-                    | <a href="{% url 'schedule:log_viewer' %}" class="text-muted">시스템 로그</a>
+                    {% if user.is_staff %}| <a href="{% url 'schedule:log_viewer' %}" class="text-muted">시스템 로그</a>{% endif %}
                 </small>
             </p>
         </div>

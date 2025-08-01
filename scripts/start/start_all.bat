@@ -5,19 +5,19 @@ echo ============================================
 echo.
 
 echo [1/3] Django 서버 시작 중... (포트 8000, 네트워크 접근 허용)
-start "Django Server" cmd /k "python manage.py runserver 0.0.0.0:8000"
+start "Django Server" cmd /k "cd /d "%~dp0..\.." && python manage.py runserver 0.0.0.0:8000"
 
 echo 잠시 대기 중...
 timeout /t 3 /nobreak >nul
 
 echo [2/3] FastAPI 챗봇 서버 시작 중... (포트 8080, 네트워크 접근 허용)
-start "FastAPI Server" cmd /k "cd chatbot_webapp\backend && uvicorn main:app --host 0.0.0.0 --port 8080 --reload"
+start "FastAPI Server" cmd /k "cd /d "%~dp0..\..\chatbot_webapp\backend" && uvicorn main:app --host 0.0.0.0 --port 8080 --reload"
 
 echo 잠시 대기 중...
 timeout /t 3 /nobreak >nul
 
 echo [3/3] React 프론트엔드 시작 중... (포트 3000)
-start "React Frontend" cmd /k "cd frontend && npm start"
+start "React Frontend" cmd /k "cd /d "%~dp0..\..\frontend" && npm start"
 
 echo.
 echo ✅ 모든 서버가 시작되었습니다!
