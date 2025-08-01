@@ -14,7 +14,6 @@
     }
     
     .schedule-container {
-        overflow-x: auto;
         width: 100%;
         border: 1px solid #dee2e6;
         margin-bottom: 20px;
@@ -54,29 +53,95 @@
         padding: 6px 4px; /* 날짜 컬럼 패딩 증가 (4px 3px -> 6px 4px) */
     }
     
-    /* 스크롤바 스타일 커스터마이징 */
+    /* 스크롤바 스타일 커스터마이징 - 슬림하게 개선 */
     .schedule-container::-webkit-scrollbar {
-        height: 12px;
+        height: 10px; /* 스크롤바 높이 축소 (14px -> 10px) */
+        width: 10px; /* 세로 스크롤바 너비도 축소 */
     }
     
     .schedule-container::-webkit-scrollbar-track {
-        background: #f1f1f1;
-        border-radius: 6px;
+        background: #f1f3f4; /* 매우 연한 회색 배경 */
+        border-radius: 5px;
+        border: none; /* 테두리 제거로 더 깔끔하게 */
     }
     
     .schedule-container::-webkit-scrollbar-thumb {
-        background: #b4c0cc;
-        border-radius: 6px;
+        background: #c1c7cd; /* 부드러운 회색 */
+        border-radius: 5px;
+        border: none; /* 테두리 제거 */
+        min-width: 30px; /* 최소 너비 축소 (50px -> 30px) */
+        transition: all 0.2s ease; /* 부드러운 전환 효과 */
     }
     
     .schedule-container::-webkit-scrollbar-thumb:hover {
-        background: #8a98a8;
+        background: #8d9499; /* 호버 시 조금 더 진한 회색 */
+        transform: scale(1.05); /* 살짝 확대 효과 */
     }
     
-    /* 스크롤 안내 표시 */
-    .scroll-indicator {
-        display: none;
+    .schedule-container::-webkit-scrollbar-thumb:active {
+        background: #6c757d; /* 클릭 시 더 진한 회색 */
+        transform: scale(0.95); /* 클릭 시 살짝 축소 */
     }
+    
+    /* 스크롤바를 화면 하단에 고정시키는 스타일 */
+    .schedule-wrapper {
+        position: relative;
+        height: calc(100vh - 340px); /* 헤더와 네비게이션 높이를 제외한 나머지 높이 (슬림한 스크롤바에 맞춰 조정) */
+        min-height: 400px; /* 최소 높이 보장 */
+    }
+    
+    .schedule-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        overflow: auto; /* 가로, 세로 스크롤 모두 허용 */
+    }
+    
+    /* 가로 스크롤바가 항상 보이도록 하는 대안 방법 */
+    .horizontal-scroll-track {
+        position: sticky;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 12px; /* 높이 축소 (17px -> 12px) */
+        background: #f8f9fa;
+        border-top: 1px solid #e9ecef; /* 더 연한 테두리 */
+        overflow-x: auto;
+        overflow-y: hidden;
+        z-index: 10;
+    }
+    
+    .horizontal-scroll-content {
+        height: 1px;
+        width: 2000px; /* 테이블과 동일한 최소 너비 */
+        background: transparent;
+    }
+    
+    /* 하단 고정 스크롤바 스타일 */
+    .horizontal-scroll-track::-webkit-scrollbar {
+        height: 8px; /* 더 슬림하게 (12px에서 8px로) */
+    }
+    
+    .horizontal-scroll-track::-webkit-scrollbar-track {
+        background: #f1f3f4; /* 매우 연한 회색 배경 */
+        border-radius: 4px;
+    }
+    
+    .horizontal-scroll-track::-webkit-scrollbar-thumb {
+        background: #c1c7cd; /* 부드러운 회색 */
+        border-radius: 4px;
+        border: none; /* 테두리 제거 */
+        min-width: 30px;
+        transition: all 0.2s ease; /* 부드러운 전환 효과 */
+    }
+    
+    .horizontal-scroll-track::-webkit-scrollbar-thumb:hover {
+        background: #8d9499; /* 호버 시 조금 더 진한 회색 */
+        transform: scale(1.05); /* 살짝 확대 효과 */
+    }
+
     
     .weekend {
         background-color: #f8f9fa;
@@ -306,12 +371,18 @@
     
     .schedule-item .contact-info,
     .schedule-item .phone-number {
-        display: flex !important;
+        display: flex;
         align-items: center;
         font-size: 10px; /* 연락처 폰트 크기 증가 (0.8em -> 10px) */
-        color: #6c757d !important; /* text-muted와 동일한 색상 */
+        color: #6c757d; /* text-muted와 동일한 색상 */
         height: 12px;
         line-height: 1;
+    }
+    
+    /* 숨김 상태를 위한 클래스 추가 */
+    .contact-info.hide-contact,
+    .phone-number.hide-contact {
+        display: none !important;
     }
     
     /* 스케줄 셀 스타일 추가 */
@@ -361,9 +432,19 @@
         display: none !important;
     }
     
+    .schedule-wrapper {
+        height: auto !important;
+        position: static !important;
+    }
+    
     .schedule-container {
         overflow: visible !important;
         max-height: none !important;
+        position: static !important;
+    }
+    
+    .horizontal-scroll-track {
+        display: none !important;
     }
     
     .schedule-table {
@@ -542,81 +623,89 @@
     </button>
 </div>
 
-<div class="schedule-container">
-                    <table class="schedule-table">
-                        <thead>
-                            <tr>
-                                <th class="bg-light department-col">부서/날짜</th>
-                                {% for date, schedules in schedules_by_date.items %}
-                                <th class="{% if date.weekday == 5 or date.weekday == 6 %}weekend{% endif %} date-col">
-                                    {{ date|date:"d" }}({{ date|date:"D"|upper }})
-                                </th>
-                                {% endfor %}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for department in departments %}
-                            <tr>
-                                <th class="bg-light department-col">
-                                    <div class="department-header">
-                                        <span class="department-name">{{ department.name }}</span>
-                                        {% if user.is_staff %}
-                                        <i class="bi bi-arrow-repeat apply-first-week-icon" 
-                                           title="1일~7일 스케줄을 이 달 전체에 적용"
-                                           data-department-id="{{ department.id }}"
-                                           data-department-name="{{ department.name }}"></i>
-                                        {% endif %}
-                                    </div>
-                                </th>
-                                {% for date, schedules in schedules_by_date.items %}
-                                <td class="{% if date.weekday == 5 or date.weekday == 6 %}weekend{% endif %} schedule-cell" 
-                                    data-date="{{ date|date:'Y-m-d' }}" 
-                                    data-department="{{ department.id }}">
-                                    
-                                    {% regroup schedules|dictsort:"work_schedule.start_time" by work_schedule as work_schedule_list %}
-                                    {% for work_schedule_group in work_schedule_list %}
-                                        {% for schedule in work_schedule_group.list %}
-                                            {% if schedule.doctor.department.id == department.id %}
-                                                <div class="schedule-item" 
-                                                     id="schedule-{{ schedule.id }}"
-                                                     data-schedule-id="{{ schedule.id }}"
-                                                     data-work-schedule="{{ schedule.work_schedule.id }}"
-                                                     data-doctor="{{ schedule.doctor.id }}">
-                                                    {% if user.is_staff %}
-                                                    <span class="delete-schedule" title="삭제">×</span>
-                                                    <span class="change-doctor" title="당직의 변경">
-                                                        <i class="bi bi-pencil-square"></i>
-                                                    </span>
-                                                    {% endif %}
-                                                    <div class="time-info">
-                                                        <strong>{{ work_schedule_group.grouper }}</strong>
-                                                    </div>
-                                                    <div class="doctor-info">
-                                                        <span class="doctor-name">{{ schedule.doctor.name }}</span>
-                                                        <span class="contact-info phone-number">{{ schedule.doctor.phone_number }}</span>
-                                                    </div>
-                                                </div>
-                                            {% endif %}
-                                        {% endfor %}
+
+<div class="schedule-wrapper">
+                    <div class="schedule-container">
+                        <table class="schedule-table">
+                            <thead>
+                                <tr>
+                                    <th class="bg-light department-col">부서/날짜</th>
+                                    {% for date, schedules in schedules_by_date.items %}
+                                    <th class="{% if date.weekday == 5 or date.weekday == 6 %}weekend{% endif %} date-col">
+                                        {{ date|date:"d" }}({{ date|date:"D"|upper }})
+                                    </th>
                                     {% endfor %}
-                                    
-                                    {% if user.is_staff %}
-                                    <div class="admin-controls">
-                                        <button class="btn btn-sm btn-outline-secondary add-schedule-btn" title="스케줄 추가">
-                                            <i class="bi bi-plus"></i>
-                                        </button>
-                                    </div>
-                                    {% endif %}
-                                </td>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for department in departments %}
+                                <tr>
+                                    <th class="bg-light department-col">
+                                        <div class="department-header">
+                                            <span class="department-name">{{ department.name }}</span>
+                                            {% if user.is_staff %}
+                                            <i class="bi bi-arrow-repeat apply-first-week-icon" 
+                                               title="1일~7일 스케줄을 이 달 전체에 적용"
+                                               data-department-id="{{ department.id }}"
+                                               data-department-name="{{ department.name }}"></i>
+                                            {% endif %}
+                                        </div>
+                                    </th>
+                                    {% for date, schedules in schedules_by_date.items %}
+                                    <td class="{% if date.weekday == 5 or date.weekday == 6 %}weekend{% endif %} schedule-cell" 
+                                        data-date="{{ date|date:'Y-m-d' }}" 
+                                        data-department="{{ department.id }}">
+                                        
+                                        {% regroup schedules|dictsort:"work_schedule.start_time" by work_schedule as work_schedule_list %}
+                                        {% for work_schedule_group in work_schedule_list %}
+                                            {% for schedule in work_schedule_group.list %}
+                                                {% if schedule.doctor.department.id == department.id %}
+                                                    <div class="schedule-item" 
+                                                         id="schedule-{{ schedule.id }}"
+                                                         data-schedule-id="{{ schedule.id }}"
+                                                         data-work-schedule="{{ schedule.work_schedule.id }}"
+                                                         data-doctor="{{ schedule.doctor.id }}">
+                                                        {% if user.is_staff %}
+                                                        <span class="delete-schedule" title="삭제">×</span>
+                                                        <span class="change-doctor" title="당직의 변경">
+                                                            <i class="bi bi-pencil-square"></i>
+                                                        </span>
+                                                        {% endif %}
+                                                        <div class="time-info">
+                                                            <strong>{{ work_schedule_group.grouper }}</strong>
+                                                        </div>
+                                                        <div class="doctor-info">
+                                                            <span class="doctor-name">{{ schedule.doctor.name }}</span>
+                                                            <span class="contact-info phone-number">{{ schedule.doctor.phone_number }}</span>
+                                                        </div>
+                                                    </div>
+                                                {% endif %}
+                                            {% endfor %}
+                                        {% endfor %}
+                                        
+                                        {% if user.is_staff %}
+                                        <div class="admin-controls">
+                                            <button class="btn btn-sm btn-outline-secondary add-schedule-btn" title="스케줄 추가">
+                                                <i class="bi bi-plus"></i>
+                                            </button>
+                                        </div>
+                                        {% endif %}
+                                    </td>
+                                    {% endfor %}
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="{{ schedules_by_date.keys|length|add:1 }}">등록된 부서가 없습니다.</td>
+                                </tr>
                                 {% endfor %}
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="{{ schedules_by_date.keys|length|add:1 }}">등록된 부서가 없습니다.</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- 하단 고정 스크롤바 -->
+                <div class="horizontal-scroll-track">
+                    <div class="horizontal-scroll-content"></div>
                 </div>
             </div>
         </div>
@@ -651,26 +740,9 @@
 {% endblock %}
 
 {% block scripts %}
-{% if user.is_staff %}
+<!-- 모든 사용자를 위한 체크박스 필터링 기능 -->
 <script>
 $(document).ready(function() {
-    console.log("스케줄 페이지 로드됨");
-    
-    // 전역 변수로 워크스케줄 데이터 저장
-    let allWorkSchedules = [];
-    
-    // 초기에 근무시간 데이터 로드
-    $.ajax({
-        url: '{% url "schedule:get_work_schedules" %}',
-        type: 'GET',
-        success: function(data) {
-            allWorkSchedules = data.work_schedules;
-        },
-        error: function() {
-            console.error('근무시간 데이터를 불러오는데 실패했습니다.');
-        }
-    });
-    
     // 필터링 체크박스 이벤트 처리
     $('#show-work-time').change(function() {
         if($(this).is(':checked')) {
@@ -690,9 +762,9 @@ $(document).ready(function() {
     
     $('#show-phone-number').change(function() {
         if($(this).is(':checked')) {
-            $('.contact-info, .phone-number').show();
+            $('.contact-info, .phone-number').removeClass('hide-contact');
         } else {
-            $('.contact-info, .phone-number').hide();
+            $('.contact-info, .phone-number').addClass('hide-contact');
         }
     });
     
@@ -701,8 +773,44 @@ $(document).ready(function() {
     $('#show-doctor-name').trigger('change');
     $('#show-phone-number').trigger('change');
     
-
+    // 스크롤바 동기화 
+    const scheduleContainer = $('.schedule-container');
+    const horizontalScrollTrack = $('.horizontal-scroll-track');
     
+    // 메인 컨테이너의 스크롤 이벤트 처리
+    scheduleContainer.on('scroll', function() {
+        const scrollLeft = this.scrollLeft;
+        horizontalScrollTrack.scrollLeft(scrollLeft);
+    });
+    
+    // 하단 스크롤바의 스크롤 이벤트 처리  
+    horizontalScrollTrack.on('scroll', function() {
+        const scrollLeft = this.scrollLeft;
+        scheduleContainer.scrollLeft(scrollLeft);
+    });
+});
+</script>
+
+{% if user.is_staff %}
+<script>
+$(document).ready(function() {
+    console.log("스케줄 페이지 로드됨");
+    
+    // 전역 변수로 워크스케줄 데이터 저장
+    let allWorkSchedules = [];
+    
+    // 초기에 근무시간 데이터 로드
+    $.ajax({
+        url: '{% url "schedule:get_work_schedules" %}',
+        type: 'GET',
+        success: function(data) {
+            allWorkSchedules = data.work_schedules;
+        },
+        error: function() {
+            console.error('근무시간 데이터를 불러오는데 실패했습니다.');
+        }
+    });
+
     // 이전 달 일정 복사 버튼 클릭 이벤트
     $('#copyPrevMonthBtn').on('click', function() {
         if (confirm('이전 달의 근무시간을 현재 달로 복사하시겠습니까?')) {
@@ -1022,7 +1130,7 @@ $(document).ready(function() {
                             scheduleItem.find('.doctor-name').hide();
                         }
                         if(!$('#show-phone-number').is(':checked')) {
-                            scheduleItem.find('.contact-info, .phone-number').hide();
+                            scheduleItem.find('.contact-info, .phone-number').addClass('hide-contact');
                         }
                     } else {
                         scheduleItem.attr('data-doctor', doctorId);
