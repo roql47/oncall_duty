@@ -335,6 +335,83 @@ def is_follow_up_question(message: str):
     print(f"     ❌ 후속 질문 패턴에 매치되지 않음")
     return False
 
+
+# =============================================================================
+# 부서 추천 함수들
+# =============================================================================
+
+def find_similar_departments(query_dept: str, all_departments: list) -> list:
+    """사용자 질문에서 추출한 부서명과 유사한 실제 부서들을 찾아 추천"""
+    if not query_dept or not all_departments:
+        return []
+    
+    similar_depts = []
+    query_lower = query_dept.lower()
+    
+    print(f"🔍 부서 추천 검색: '{query_dept}'")
+    print(f"   전체 부서 수: {len(all_departments)}개")
+    
+    # 1. 부분 매칭 - 질문한 단어가 부서명에 포함된 경우
+    for dept in all_departments:
+        if query_dept in dept:
+            similar_depts.append(dept)
+            print(f"   ✅ 부분 매칭: '{dept}' ('{query_dept}' 포함)")
+    
+    # 2. 키워드 기반 매칭
+    keyword_mappings = {
+        '외과': ['외과', '수술'],
+        '내과': ['내과', '내시경'],
+        '소아': ['소아', '아이', '어린이'],
+        '정신': ['정신', '심리'],
+        '피부': ['피부', '성형'],
+        '안과': ['안과', '눈'],
+        '이비인후과': ['이비인후과', '귀', '코', '목'],
+        '산부인과': ['산부인과', '산과', '부인과', '여성'],
+        '비뇨기과': ['비뇨기과', '비뇨'],
+        '응급': ['응급', 'ER', '응급실'],
+        '중환자': ['중환자', 'ICU', '집중치료'],
+        '재활': ['재활', '물리치료'],
+        '마취': ['마취', '수술'],
+        '영상': ['영상', '방사선', 'CT', 'MRI'],
+        '병리': ['병리', '검사']
+    }
+    
+    # 키워드 매칭으로 추가 부서 찾기
+    for keyword, related_words in keyword_mappings.items():
+        if any(word in query_lower for word in related_words):
+            for dept in all_departments:
+                if keyword in dept and dept not in similar_depts:
+                    similar_depts.append(dept)
+                    print(f"   ✅ 키워드 매칭: '{dept}' (키워드: {keyword})")
+    
+    print(f"   📋 총 {len(similar_depts)}개 부서 발견: {similar_depts}")
+    return similar_depts
+
+def create_department_recommendation_response(query_dept: str, similar_depts: list) -> str:
+    """부서 추천 응답 메시지 생성"""
+    if not similar_depts:
+        return f"죄송합니다. '{query_dept}'와 관련된 진료과를 찾을 수 없습니다."
+    
+    if len(similar_depts) == 1:
+        # 하나만 발견된 경우
+        return f"'{query_dept}'와 관련하여 **{similar_depts[0]}**을(를) 찾았습니다.\n\n다시 질문해 주세요:\n💡 예시: \"{similar_depts[0]} 당직 누구야?\""
+    
+    # 여러 개 발견된 경우
+    response_lines = [f"'{query_dept}'와 관련된 여러 진료과를 찾았습니다:"]
+    response_lines.append("")
+    
+    for i, dept in enumerate(similar_depts[:5], 1):  # 최대 5개까지만
+        response_lines.append(f"{i}. **{dept}**")
+    
+    if len(similar_depts) > 5:
+        response_lines.append(f"... 외 {len(similar_depts) - 5}개 더")
+    
+    response_lines.append("")
+    response_lines.append("구체적인 진료과명으로 다시 질문해 주세요:")
+    response_lines.append(f"💡 예시: \"{similar_depts[0]} 당직 누구야?\"")
+    
+    return "\n".join(response_lines)
+
 def extract_follow_up_reference(message: str):
     """후속 질문에서 참조 정보 추출 (시간, 연락처 등)"""
     message_clean = message.strip()
@@ -665,6 +742,15 @@ if not static_dir.exists():
     static_dir.mkdir(parents=True)
 
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+# 모든 요청 로깅 미들웨어
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    print(f"🌐 요청 수신: {request.method} {request.url}")
+    print(f"   클라이언트 IP: {request.client.host if request.client else 'unknown'}")
+    response = await call_next(request)
+    print(f"   응답 상태: {response.status_code}")
+    return response
 
 # CORS 설정 (프론트엔드 연동용)
 app.add_middleware(
@@ -1209,6 +1295,58 @@ def parse_date_reference(message: str):
     elif "오늘" in message:
         return today.strftime('%Y-%m-%d')
     
+    # 월 관련 키워드 처리 ('다음달', '저번달', '이번달', '9월' 등)
+    month_patterns = [
+        (r"다음\s*달", 1),    # 다음달
+        (r"저번\s*달", -1),   # 저번달
+        (r"지난\s*달", -1),   # 지난달
+        (r"이번\s*달", 0),    # 이번달
+        (r"(\d{1,2})월", None)  # 특정 월 (9월 등)
+    ]
+    
+    for pattern, month_offset in month_patterns:
+        match = re.search(pattern, message)
+        if match:
+            if month_offset is not None:  # 상대적 월 (다음달, 저번달 등)
+                current_month = today.month
+                current_year = today.year
+                
+                target_month = current_month + month_offset
+                target_year = current_year
+                
+                # 월이 범위를 벗어나는 경우 연도 조정
+                if target_month > 12:
+                    target_month = target_month - 12
+                    target_year += 1
+                elif target_month < 1:
+                    target_month = target_month + 12
+                    target_year -= 1
+                
+                # 해당 월의 첫째 날로 설정 (당직 질문에서는 보통 특정 일자보다는 월 전체를 의미)
+                target_date = datetime(target_year, target_month, 1)
+                
+                month_names = {1: '다음달', -1: '저번달/지난달', 0: '이번달'}
+                print(f"'{month_names.get(month_offset)}' 키워드 감지됨 - 날짜 변환: {target_date.strftime('%Y-%m-%d')} ({target_year}년 {target_month}월)")
+                return target_date.strftime('%Y-%m-%d')
+            else:  # 특정 월 (9월 등)
+                month_num = int(match.group(1))
+                current_year = today.year
+                current_month = today.month
+                
+                # 현재 월보다 이전 월이면 내년으로, 이후 월이면 올해로 설정
+                if month_num < current_month:
+                    target_year = current_year + 1
+                else:
+                    target_year = current_year
+                
+                try:
+                    target_date = datetime(target_year, month_num, 1)
+                    print(f"'{month_num}월' 키워드 감지됨 - 날짜 변환: {target_date.strftime('%Y-%m-%d')} ({target_year}년 {month_num}월)")
+                    return target_date.strftime('%Y-%m-%d')
+                except ValueError:
+                    print(f"유효하지 않은 월: {month_num}")
+                    continue
+    
     # '2025년 6월 15일' 형식 처리 (한글 연도 포함)
     year_date_pattern = re.search(r'(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일', message)
     if year_date_pattern:
@@ -1316,6 +1454,8 @@ async def generate_gemini_response(query: str, context: str):
 @app.post("/rag")
 async def rag_query(req: RAGRequest):
     """RAG 기반 질의응답 엔드포인트"""
+    print("🔍🔍🔍 RAG 엔드포인트 호출됨! 🔍🔍🔍")
+    print(f"RAG 요청 쿼리: {req.query}")
     try:
         if vector_store is None:
             return {"status": "error", "message": "벡터 DB가 초기화되지 않았습니다."}
@@ -1587,6 +1727,28 @@ async def rag_query(req: RAGRequest):
         print(f"RAG 질의응답 오류: {e}")
         traceback.print_exc()
         return {"status": "error", "message": f"오류 발생: {str(e)}"}
+
+# 루트 경로 - 메인 챗봇 인터페이스
+@app.get("/", response_class=HTMLResponse)
+async def get_chatbot_interface():
+    """메인 챗봇 웹 인터페이스"""
+    html_file = static_dir / "index.html"
+    if html_file.exists():
+        with open(html_file, "r", encoding="utf-8") as f:
+            return f.read()
+    else:
+        return """
+        <html>
+            <head>
+                <title>당직 스케줄 챗봇</title>
+            </head>
+            <body>
+                <h1>당직 스케줄 챗봇</h1>
+                <p>인터페이스를 불러올 수 없습니다.</p>
+                <p><a href="/static/index.html">직접 링크</a></p>
+            </body>
+        </html>
+        """
 
 # Gemini RAG 웹 인터페이스
 @app.get("/gemini-rag", response_class=HTMLResponse)
@@ -1933,6 +2095,8 @@ async def delete_vector_db():
 
 @app.post("/chat")
 async def chat(req: ChatRequest, request: Request):
+    print("🚀🚀🚀 CHAT 엔드포인트 호출됨! 🚀🚀🚀")
+    print(f"요청 메시지: {req.message}")
     start_time = time.time()  # 응답 시간 측정 시간
     
     # 세션 ID 처리 개선 - 요청 body와 헤더 모두에서 확인
@@ -1970,6 +2134,7 @@ async def chat(req: ChatRequest, request: Request):
     
     try:
         message = req.message
+        
         current_datetime = datetime.now()
         print(f"\n===== 새 채팅 요청: '{message}' =====")
         print(f"===== 현재 시간: {current_datetime} =====")
@@ -2261,28 +2426,44 @@ async def chat(req: ChatRequest, request: Request):
         # 부서 연락처 질문인지 우선 확인 (더 일반적인 패턴)
         # "정형외과 당직의 번호는?" 같은 패턴을 정확히 매칭
         # 부서명과 역할을 분리해서 추출
-        dept_contact_pattern = re.search(r'(?:지금|현재)?\s*([가-힣\s]+(?:과|실|센터|부서))\s*(?:당직의?)?\s*(?:연락처|전화번호|번호)\s*(?:알려줘|뭐야|는|은)', message)
+        dept_contact_pattern = re.search(r'(?:지금|현재)?\s*([가-힣\s]+(?:과|실|센터|부서|당직의|담당의))\s*(?:연락처|전화번호|번호)\s*(?:알려줘|뭐야|는|은)', message)
         if dept_contact_pattern:
             dept_mention = dept_contact_pattern.group(1).strip()
             # "지금"이나 "현재" 같은 시간 키워드 제거
             dept_mention_clean = re.sub(r'^(?:지금|현재)\s*', '', dept_mention).strip()
+            # 부서명에서 역할 부분 제거 ("당직의", "담당의" 등)
+            dept_mention_clean = re.sub(r'\s*(?:당직의|담당의|수술의)\s*$', '', dept_mention_clean).strip()
             print(f"===== 부서 연락처 질문 감지: '{dept_mention}' → 정리: '{dept_mention_clean}' =====")
             
             # 부서명 매칭 시도 (더 정확한 매칭)
             departments = await get_all_departments_async()
             print(f"     전체 부서 목록: {departments}")
+            
+            # 동적 별칭 매핑 생성
+            department_aliases = await generate_department_aliases_async(departments)
+            
             matched_dept = None
+            
+            # 0. 별칭 매핑 먼저 확인 (정확한 단어 매칭)
+            for alias, official_name in department_aliases.items():
+                # 단어 경계를 고려한 정확한 매칭
+                pattern = r'\b' + re.escape(alias) + r'\b'
+                if re.search(pattern, dept_mention_clean):
+                    matched_dept = official_name
+                    print(f"     ✅ 부서 별칭 매핑: '{alias}' → '{official_name}'")
+                    break
             
             # 부서명을 길이 기준으로 내림차순 정렬 (더 구체적인 부서명 우선)
             sorted_departments = sorted(departments, key=len, reverse=True)
             print(f"     길이순 정렬된 부서 목록: {sorted_departments}")
             
-            # 1. 완전 일치 우선 (dept_mention_clean과 정확히 일치)
-            for dept in sorted_departments:
-                if dept == dept_mention_clean:
-                    matched_dept = dept
-                    print(f"     ✅ 완전 일치: '{dept}'")
-                    break
+            # 1. 완전 일치 우선 (dept_mention_clean과 정확히 일치) - 별칭 매핑이 없는 경우만
+            if not matched_dept:
+                for dept in sorted_departments:
+                    if dept == dept_mention_clean:
+                        matched_dept = dept
+                        print(f"     ✅ 완전 일치: '{dept}'")
+                        break
             
             # 2. 추출된 부서명에서 부서명 포함 여부 확인 (더 구체적인 것 우선)
             if not matched_dept:
@@ -2310,11 +2491,12 @@ async def chat(req: ChatRequest, request: Request):
             
             if matched_dept:
                 print(f"===== 매칭된 부서: '{matched_dept}' =====")
-                # 현재 날짜의 해당 부서 당직의 정보 조회
-                today_date = datetime.now().strftime('%Y-%m-%d')
+                # 질문에서 추출된 날짜 사용 (없으면 오늘 날짜)
+                query_date = entities.get('date', datetime.now().strftime('%Y-%m-%d'))
+                print(f"     질문 날짜: {query_date}")
                 
                 schedules = await get_schedule_from_db_async(
-                    today_date, matched_dept, None, None, False, None
+                    query_date, matched_dept, None, None, False, None
                 )
                 
                 if schedules and isinstance(schedules, list) and len(schedules) > 0:
@@ -2325,10 +2507,17 @@ async def chat(req: ChatRequest, request: Request):
                     phone_number = current_schedule.doctor.phone_number
                     work_schedule = format_work_schedule(current_schedule.work_schedule)
                     
+                    # 날짜 포맷팅
+                    try:
+                        date_obj = datetime.strptime(query_date, '%Y-%m-%d')
+                        formatted_date = date_obj.strftime('%m월 %d일')
+                    except:
+                        formatted_date = query_date
+                    
                     if phone_number:
-                        response_text = f"{matched_dept} 당직의({doctor_name})의 연락처는 {phone_number}입니다.\n• 당직 시간: {work_schedule}"
+                        response_text = f"[{formatted_date}] {matched_dept} 당직의({doctor_name})의 연락처는 {phone_number}입니다.\n• 당직 시간: {work_schedule}"
                     else:
-                        response_text = f"{matched_dept} 당직의는 {doctor_name}이지만 연락처 정보가 등록되어 있지 않습니다.\n• 당직 시간: {work_schedule}"
+                        response_text = f"[{formatted_date}] {matched_dept} 당직의는 {doctor_name}이지만 연락처 정보가 등록되어 있지 않습니다.\n• 당직 시간: {work_schedule}"
                     
                     entities = {'department': matched_dept, 'contact_request': True, 'doctor_name': doctor_name}
                     context.update_context(entities, message, response_text)
@@ -2398,8 +2587,12 @@ async def chat(req: ChatRequest, request: Request):
             if doctor_name:
                 print(f"===== 개인별 스케줄 질문 감지: {doctor_name} =====")
                 
-                # 해당 의사의 현재 달 스케줄 조회
-                schedule_data = await get_doctor_monthly_schedule_async(doctor_name)
+                # 날짜 엔티티도 추출 (의사 이름 기반 질문에서도 월 정보 고려)
+                date_str = parse_date_reference(message)
+                print(f"     추출된 날짜: {date_str}")
+                
+                # 해당 의사의 스케줄 조회 (날짜 고려)
+                schedule_data = await get_doctor_monthly_schedule_async(doctor_name, date_str)
                 
                 if schedule_data:
                     # 스케줄 데이터를 포맷팅하여 응답 생성
@@ -2409,6 +2602,8 @@ async def chat(req: ChatRequest, request: Request):
                     response_text = f"죄송합니다. {doctor_name} 의사의 정보를 찾을 수 없습니다."
                 
                 entities = {'doctor_name': doctor_name, 'schedule_request': True}
+                if date_str:
+                    entities['date'] = date_str
                 context.update_context(entities, message, response_text)
                 
                 response_time = (time.time() - start_time) * 1000
@@ -2422,7 +2617,7 @@ async def chat(req: ChatRequest, request: Request):
                 )
             else:
                 # 스케줄 질문으로 감지되었지만 의사 이름을 추출하지 못한 경우
-                response_text = "의사 이름을 정확히 입력해주세요. 예: '조준환 교수님 당직 언제야?'"
+                response_text = "의사 이름을 정확히 입력해주세요.\n\n💡 예제 질문: '조준환 교수님 당직 언제야?'"
                 
                 entities = {'schedule_request': True, 'name_extraction_failed': True}
                 context.update_context(entities, message, response_text)
@@ -2443,7 +2638,68 @@ async def chat(req: ChatRequest, request: Request):
             entities = await extract_entities(message)
             print(f"추출된 엔티티: {entities}")
             
+            # 시스템 관련 질문 직접 처리
+            system_patterns = [
+                r'너는?\s*누구', r'당신은?\s*누구', r'너는?\s*뭐', r'당신은?\s*뭐',
+                r'너의?\s*이름', r'당신의?\s*이름', r'자기소개', r'소개해',
+                r'너는?\s*어떤', r'당신은?\s*어떤'
+            ]
+            
+            is_system_question = any(re.search(pattern, message) for pattern in system_patterns)
+            
+            if is_system_question:
+                response_time = (time.time() - start_time) * 1000
+                response_text = "안녕하세요! 저는 당직 의료진 정보를 안내하는 챗봇입니다. \n\n다음과 같은 질문에 도움을 드릴 수 있습니다:\n• 오늘/내일 당직 의사는 누구인가요?\n• 신경과 당직의 연락처를 알려주세요\n• 지금 응급실 당직의는 누구인가요?\n• 특정 날짜의 당직표를 확인해주세요\n\n궁금한 것이 있으시면 언제든 물어보세요! 😊"
+                return create_chatbot_response_with_logging(
+                    response_text=response_text,
+                    session_id=session_id,
+                    message=message,
+                    response_time=response_time,
+                    client_ip=client_ip,
+                    entities={'system_question': True}
+                )
+            
             # 이미 extract_entities에서 날짜 조정을 완료했으므로 여기서는 제거
+            
+            # date 엔티티만 추출된 경우 처리 (부서, 역할, 의사명이 모두 없는 경우)
+            has_only_date = (
+                entities.get('date') and 
+                not entities.get('department') and 
+                not entities.get('role') and 
+                not entities.get('doctor_name') and
+                not entities.get('date_question')  # 날짜 질문은 제외
+            )
+            
+            if has_only_date:
+                response_time = (time.time() - start_time) * 1000
+                
+                # 날짜 포맷팅
+                try:
+                    date_obj = datetime.strptime(entities['date'], '%Y-%m-%d')
+                    formatted_date = date_obj.strftime('%m월 %d일')
+                except:
+                    formatted_date = entities['date']
+                
+                response_text = f"""📅 무엇을 알고 싶으신가요?
+
+구체적으로 질문해 주세요:
+
+💡 예제 질문:
+• "8월 6일 신경과 당직 누구야?"
+• "08월 06일 응급실 당직의 연락처 알려줘"
+• "오늘 외과 수술의는 누구인가요?"
+• "2025-08-06 내과 당직의는 누구인가요?"
+
+부서명이나 역할을 포함해서 다시 질문해 주세요! 🏥"""
+                
+                return create_chatbot_response_with_logging(
+                    response_text=response_text,
+                    session_id=session_id,
+                    message=message,
+                    response_time=response_time,
+                    client_ip=client_ip,
+                    entities={'date_only': True, 'needs_specific_info': True}
+                )
             
         except Exception as e:
             print(f"엔티티 추출 오류: {e}")
@@ -2519,7 +2775,7 @@ async def chat(req: ChatRequest, request: Request):
                 
                 if departments:
                     dept_list = '\n'.join([f"• {dept}" for dept in departments])
-                    response_text = f"📋 현재 등록된 부서 목록:\n\n{dept_list}\n\n💡 예시 질문: \"오늘 순환기내과 당직 누구야?\""
+                    response_text = f"📋 현재 등록된 부서 목록:\n\n{dept_list}\n\n💡 예제 질문: \"오늘 순환기내과 당직 누구야?\""
                 else:
                     response_text = "등록된 부서 정보가 없습니다."
                     
@@ -2579,31 +2835,65 @@ async def chat(req: ChatRequest, request: Request):
         
         # 부서명이 매칭되지 않은 경우 처리 - 관련 부서 추천
         if entities.get("unmatched_department"):
-            try:
-                response_text, extra_entities = await suggest_related_departments(message)
-                updated_entities = {**entities, **extra_entities}
+            print(f"===== 부서 추천 시스템 시작 =====")
+            
+            from schedule.models import Department
+            all_departments = list(Department.objects.values_list('name', flat=True))
+            query_dept = entities.get("query_dept")  # extract_entities에서 추출한 부서명
+            
+            print(f"추출된 질문 부서명: '{query_dept}'")
+            print(f"사용 가능한 전체 부서 수: {len(all_departments)}개")
+            
+            if query_dept and all_departments:
+                # 추천 시스템 사용
+                similar_depts = find_similar_departments(query_dept, all_departments)
                 
-                response_time = (time.time() - start_time) * 1000
-                return create_chatbot_response_with_logging(
-                    response_text=response_text,
-                    session_id=session_id,
-                    message=message,
-                    response_time=response_time,
-                    client_ip=client_ip,
-                    entities=updated_entities
-                )
+                if similar_depts:
+                    # 유사한 부서들을 찾은 경우
+                    response_text = create_department_recommendation_response(query_dept, similar_depts)
+                    print(f"✅ 부서 추천 완료: {len(similar_depts)}개 부서 추천")
+                else:
+                    # 유사한 부서를 찾지 못한 경우
+                    dept_list = "\n".join([f"• {dept}" for dept in sorted(all_departments)[:15]])
+                    more_count = max(0, len(all_departments) - 15)
+                    more_text = f"\n... 외 {more_count}개 더" if more_count > 0 else ""
+                    
+                    response_text = f"""'{query_dept}'와 관련된 진료과를 찾을 수 없습니다.
+
+사용 가능한 진료과 목록:
+{dept_list}{more_text}
+
+정확한 진료과명으로 다시 질문해 주세요!
+💡 예시: "신경과 당직 누구야?" """
+                    print(f"❌ '{query_dept}' 관련 부서 추천 실패 - 전체 목록 제공")
+            else:
+                # 부서명을 추출하지 못했거나 DB 오류인 경우
+                if all_departments:
+                    dept_list = "\n".join([f"• {dept}" for dept in sorted(all_departments)[:15]])
+                    more_count = max(0, len(all_departments) - 15)
+                    more_text = f"\n... 외 {more_count}개 더" if more_count > 0 else ""
+                    
+                    response_text = f"""진료과명을 명확히 입력해 주세요.
+
+사용 가능한 진료과 목록:
+{dept_list}{more_text}
+
+정확한 진료과명으로 다시 질문해 주세요!
+💡 예시: "신경과 당직 누구야?" """
+                else:
+                    response_text = "진료과 정보를 불러올 수 없습니다."
                 
-            except Exception as e:
-                print(f"부서 목록 조회 오류: {e}")
-                response_time = (time.time() - start_time) * 1000
-                return create_chatbot_response_with_logging(
-                    response_text="부서를 찾을 수 없습니다. 정확한 부서명으로 다시 질문해주세요.",
-                    session_id=session_id,
-                    message=message,
-                    response_time=response_time,
-                    client_ip=client_ip,
-                    entities={'error': True, 'unmatched_department': True}
-                )
+                print(f"❌ 부서명 추출 실패 또는 DB 오류 - 기본 안내 제공")
+            
+            response_time = (time.time() - start_time) * 1000
+            return create_chatbot_response_with_logging(
+                response_text=response_text,
+                session_id=session_id,
+                message=message,
+                response_time=response_time,
+                client_ip=client_ip,
+                entities={'department_recommendation': True, 'query_dept': query_dept}
+            )
         
         # 매핑된 부서에 스케줄이 없는 경우 대안 제시
         if "department" in entities:
@@ -2653,12 +2943,12 @@ async def chat(req: ChatRequest, request: Request):
                         
                         if available_depts:
                             dept_list = '\n'.join([f"• {dept}" for dept in available_depts])
-                            response_text = f"⚠️ {dept_name}에는 {date_str}에 당직 정보가 없습니다.\n\n📋 대신 다음 관련 부서를 확인해보세요:\n\n{dept_list}\n\n💡 예시: \"오늘 {available_depts[0]} 당직 누구야?\""
+                            response_text = f"⚠️ {dept_name}에는 {date_str}에 당직 정보가 없습니다.\n\n📋 대신 다음 관련 부서를 확인해보세요:\n\n{dept_list}\n\n💡 예제 질문: \"오늘 {available_depts[0]} 당직 누구야?\""
                         else:
                             # 관련 부서도 없으면 전체 부서 목록 제공
                             departments = await get_all_departments_async()
                             dept_list = '\n'.join([f"• {dept}" for dept in departments])
-                            response_text = f"⚠️ {dept_name}에는 {date_str}에 당직 정보가 없습니다.\n\n📋 다른 부서를 확인해보세요:\n\n{dept_list}\n\n💡 예시: \"오늘 순환기내과 당직 누구야?\""
+                            response_text = f"⚠️ {dept_name}에는 {date_str}에 당직 정보가 없습니다.\n\n📋 다른 부서를 확인해보세요:\n\n{dept_list}\n\n💡 예제 질문: \"오늘 순환기내과 당직 누구야?\""
                         
                         response_time = (time.time() - start_time) * 1000
                         return create_chatbot_response_with_logging(
@@ -2773,19 +3063,31 @@ async def chat(req: ChatRequest, request: Request):
                 # 벡터 검색으로 폴백
         
         # 4. 벡터 검색 시도 (FAISS 벡터 스토어가 사용 가능한 경우)
+        print(f"===== 벡터 검색 시도 시작 =====")
         print(f"벡터 스토어 상태 확인: {vector_store is not None}")
         if vector_store is not None:
             print(f"벡터 스토어 인덱스 상태: {vector_store.index is not None}, 벡터 수: {vector_store.index.ntotal if vector_store.index else 0}")
+            
+            # 벡터 수가 0인 경우 명확히 표시
+            if vector_store.index and vector_store.index.ntotal == 0:
+                print("⚠️ 벡터 DB가 비어있습니다! 벡터 DB 업데이트가 필요합니다.")
+                print("   웹 인터페이스에서 '벡터 DB 업데이트' 버튼을 클릭하거나")
+                print("   POST /update-vector-db API를 호출하세요.")
+            
             try:
                 print("벡터 검색 시작...")
                 # 메시지 임베딩
+                print(f"메시지 임베딩 생성 중: '{message}'")
                 query_embedding = model.encode(message).tolist()
+                print(f"임베딩 생성 완료. 차원: {len(query_embedding)}")
                 
                 # 벡터 검색 수행
+                print("벡터 검색 수행 중...")
                 search_results = vector_store.search(query_embedding, k=20)  # 더 많은 결과 가져오기
+                print(f"벡터 검색 완료. 반환된 결과 수: {len(search_results) if search_results else 0}")
                 
                 if search_results and len(search_results) > 0:
-                    print(f"벡터 검색 결과: {len(search_results)}개 발견")
+                    print(f"✅ 벡터 검색 결과: {len(search_results)}개 발견")
                     
                     # 상위 결과 로깅
                     for i, result in enumerate(search_results[:10]):  # 상위 10개만 로깅
@@ -3431,6 +3733,10 @@ async def chat(req: ChatRequest, request: Request):
                     
                 response = response_text  # 기존 변수명 유지를 위해
         else:
+            print("❌ 벡터 스토어가 None입니다!")
+            print("   서버 시작 시 벡터 스토어 초기화에 실패했을 가능성이 있습니다.")
+            print("   FAISS, SentenceTransformer 등의 라이브러리 문제일 수 있습니다.")
+            
             # 벡터 스토어가 없는 경우 Gemini RAG로 대체 시도
             try:
                 print("벡터 스토어가 없어 Gemini RAG로 대체 시도합니다...")
@@ -3515,6 +3821,60 @@ def get_all_departments():
 # 동기 함수를 비동기로 변환
 get_all_departments_async = sync_to_async(get_all_departments)
 
+def generate_department_aliases(departments):
+    """DB 부서명을 분석하여 동적으로 별칭 매핑 생성"""
+    aliases = {}
+    
+    for dept in departments:
+        # 응급 관련 매핑
+        if '응급의학과' in dept:
+            aliases['응급실'] = dept
+            aliases['ER'] = dept
+            aliases['응급과'] = dept
+        
+        # 소아과 응급실 매핑
+        if '소아과 ER' in dept:
+            aliases['소아과 응급실'] = dept
+            aliases['소아 응급실'] = dept
+        
+        # 중환자실 매핑
+        if '중환자실' in dept:
+            if '내과계' in dept:
+                aliases['내과 중환자실'] = dept
+                aliases['내과 ICU'] = dept
+            elif '외과계' in dept:
+                aliases['외과 중환자실'] = dept
+                aliases['외과 ICU'] = dept
+            else:
+                aliases['중환자실'] = dept
+                aliases['ICU'] = dept
+        
+        # 병동 매핑
+        if '병동' in dept:
+            base_dept = dept.replace(' 병동', '')
+            aliases[f'{base_dept}병동'] = dept
+        
+        # 외과 관련 매핑 (정확한 매칭을 위해 조건 수정)
+        if dept == '외과 당직의':
+            aliases['외과 당직'] = dept
+        if dept == '외과 수술의':
+            aliases['외과 수술'] = dept
+            aliases['수술실'] = dept
+        if '외과(ER call only)' in dept:
+            aliases['외과 응급실'] = dept
+            aliases['외과 ER'] = dept
+        
+        # NICU 매핑
+        if 'NICU' in dept:
+            aliases['신생아중환자실'] = dept
+            aliases['신생아 중환자실'] = dept
+    
+    print(f"동적 생성된 부서 별칭: {aliases}")
+    return aliases
+
+# 동기 함수를 비동기로 변환
+generate_department_aliases_async = sync_to_async(generate_department_aliases)
+
 async def suggest_related_departments(message: str, input_dept_name: str = None):
     """부서 매칭 실패 시 관련 부서를 추천하는 함수"""
     print(f"===== 관련 부서 추천 시작 =====")
@@ -3559,7 +3919,7 @@ async def suggest_related_departments(message: str, input_dept_name: str = None)
         if related_departments:
             # 관련 부서가 있으면 추천 메시지 생성
             dept_list = '\n'.join([f"• {dept}" for dept in related_departments[:5]])  # 상위 5개만
-            suggested_msg = f"⚠️ 해당 부서를 찾을 수 없습니다.\n\n🔍 혹시 다음 부서 중 하나를 찾으시나요?\n\n{dept_list}\n\n💡 정확한 부서명으로 다시 질문해주세요.\n예: \"오늘 {related_departments[0]} 당직 누구야?\""
+            suggested_msg = f"⚠️ 해당 부서를 찾을 수 없습니다.\n\n🔍 혹시 다음 부서 중 하나를 찾으시나요?\n\n{dept_list}\n\n💡 예제 질문: \"오늘 {related_departments[0]} 당직 누구야?\""
             return suggested_msg, {'suggested_departments': related_departments}
         else:
             # 관련 부서가 없으면 전체 부서 목록 제공
@@ -3839,31 +4199,53 @@ async def extract_entities(message: str):
     
     # 부서 추출 (Django DB에서 부서명 가져오기) - 부서 연락처 질문과 동일한 로직 사용
     departments = await get_all_departments_async()
+    print(f"===== extract_entities 부서 추출 시작 =====")
+    print(f"     메시지: '{message}'")
+    print(f"     전체 부서 수: {len(departments)}개")
+    
+    # 동적 별칭 매핑 생성
+    department_aliases = await generate_department_aliases_async(departments)
     
     # 부서명을 길이 기준으로 내림차순 정렬 (더 구체적인 부서명 우선)
     sorted_depts = sorted(departments, key=len, reverse=True)
+    print(f"     길이순 정렬된 부서 목록 (상위 10개): {sorted_depts[:10]}")
     
     matched_dept = None
     
-    # 1. 전체 메시지에서 부서명 매칭 - 모든 매칭을 찾아서 가장 적합한 것 선택
-    print(f"     부서명 직접 매칭 시작 - 메시지: '{message}'")
-    all_matches = []
-    for dept in sorted_depts:
-        if dept in message:
-            all_matches.append(dept)
-            print(f"     🔍 부서 매칭 후보: '{dept}'")
+    # 0. 별칭 매핑 먼저 확인 (정확한 단어 매칭)
+    for alias, official_name in department_aliases.items():
+        # 단어 경계를 고려한 정확한 매칭
+        pattern = r'\b' + re.escape(alias) + r'\b'
+        if re.search(pattern, message):
+            matched_dept = official_name
+            print(f"     ✅ 부서 별칭 매핑: '{alias}' → '{official_name}'")
+            break
     
-    if all_matches:
-        # 가장 적합한 부서명 선택: 1) 길이 우선, 2) 공백 없는 것 우선, 3) 메시지에서 먼저 나오는 것 우선
-        def match_priority(dept):
-            return (
-                len(dept),  # 길이 (길수록 좋음)
-                -dept.count(' '),  # 공백 개수 (적을수록 좋음, 음수로 역순)
-                -message.find(dept)  # 메시지에서 위치 (앞에 나올수록 좋음, 음수로 역순)
-            )
-        
-        matched_dept = max(all_matches, key=match_priority)
-        print(f"     ✅ 일반 엔티티에서 부서 매칭 (최적): '{matched_dept}' (후보: {all_matches})")
+    # 1. 전체 메시지에서 부서명 매칭 - 모든 매칭을 찾아서 가장 적합한 것 선택 (별칭 매핑이 없는 경우만)
+    if not matched_dept:
+        print(f"     부서명 직접 매칭 시작 - 메시지: '{message}'")
+        all_matches = []
+        for dept in sorted_depts:
+            if dept in message:
+                all_matches.append(dept)
+                print(f"     🔍 부서 매칭 후보: '{dept}'")
+    
+        if all_matches:
+            # 가장 적합한 부서명 선택: 1) 길이 우선, 2) 공백 없는 것 우선, 3) 메시지에서 먼저 나오는 것 우선
+            def match_priority(dept):
+                return (
+                    len(dept),  # 길이 (길수록 좋음)
+                    -dept.count(' '),  # 공백 개수 (적을수록 좋음, 음수로 역순)
+                    -message.find(dept)  # 메시지에서 위치 (앞에 나올수록 좋음, 음수로 역순)
+                )
+            
+            matched_dept = max(all_matches, key=match_priority)
+            print(f"     ✅ 일반 엔티티에서 부서 매칭 (최적): '{matched_dept}' (후보: {all_matches})")
+            
+            # 우선순위 점수 디버깅
+            for dept in all_matches:
+                priority = match_priority(dept)
+                print(f"       - '{dept}': 우선순위 점수 = {priority} (길이={len(dept)}, 공백={dept.count(' ')}, 위치={message.find(dept)})")
     
     # 2. 부분 매칭 (공백 제거 후 비교, 더 구체적인 것 우선)
     if not matched_dept:
@@ -3894,13 +4276,38 @@ async def extract_entities(message: str):
         print(f"부서 매칭 완료: '{matched_dept}'")
     else:
         # 부서명이 매칭되지 않은 경우 찾지 못한 부서명 기록
-        dept_keywords = ["과", "부서", "센터", "클리닉"]
+        dept_keywords = ["과", "부서", "센터", "클리닉", "실"]
+        query_dept_for_recommendation = None
+        
         for keyword in dept_keywords:
             if keyword in message:
                 # 부서명 같은 단어가 있지만 매칭되지 않음
                 entities["unmatched_department"] = True
-                print(f"부서 관련 키워드 감지되었으나 매칭되지 않음: '{message}'")
+                
+                # 추천을 위해 사용자가 입력한 부서명 추출
+                words = message.split()
+                for word in words:
+                    if keyword in word:
+                        query_dept_for_recommendation = word
+                        break
+                
+                print(f"부서 관련 키워드 감지되었으나 매칭되지 않음: '{message}' (추출된 부서명: {query_dept_for_recommendation})")
                 break
+        
+        # 일반적인 의료 키워드도 확인
+        if not query_dept_for_recommendation:
+            medical_keywords = ['외과', '내과', '소아', '정신', '피부', '안과', '이비인후과', 
+                              '산부인과', '비뇨기과', '응급', '중환자', '재활', '마취', '영상', '병리']
+            for keyword in medical_keywords:
+                if keyword in message:
+                    query_dept_for_recommendation = keyword
+                    entities["unmatched_department"] = True
+                    print(f"의료 키워드 감지되었으나 매칭되지 않음: '{message}' (추출된 키워드: {keyword})")
+                    break
+        
+        # 추천용 부서명 저장
+        if query_dept_for_recommendation:
+            entities["query_dept"] = query_dept_for_recommendation
     
     # 현재 날짜를 기본값으로 설정 (부서가 매칭되었지만 날짜가 없는 경우)
     if matched_dept and "date" not in entities:
@@ -3952,13 +4359,27 @@ async def extract_entities(message: str):
                     entities["night_shift"] = True
             break
     
-    # 역할이 없지만 '누구'라는 표현이 있으면 일반적인 담당의 찾기
+    # '누구' 키워드 정교한 분류 - 시스템 질문 vs 의료진 질문 구분
     if 'role' not in entities and ('누구' in message or '담당' in message):
-        entities["role"] = '담당의'
+        # 시스템 관련 질문 패턴 체크
+        system_patterns = [
+            r'너는?\s*누구', r'당신은?\s*누구', r'너는?\s*뭐', r'당신은?\s*뭐',
+            r'너의?\s*이름', r'당신의?\s*이름', r'자기소개', r'소개해',
+            r'너는?\s*어떤', r'당신은?\s*어떤'
+        ]
+        
+        is_system_question = any(re.search(pattern, message) for pattern in system_patterns)
+        
+        # 시스템 질문이 아닐 때만 담당의 역할 설정
+        if not is_system_question:
+            entities["role"] = '담당의'
     
     # 연락처 요청 여부
     if "번호" in message or "연락처" in message or "전화" in message or "폰" in message:
         entities["phone_requested"] = True
+    
+    print(f"===== extract_entities 최종 결과 =====")
+    print(f"     추출된 엔티티: {entities}")
     
     return entities
 
@@ -4143,15 +4564,16 @@ def extract_doctor_name_for_schedule(message: str):
     print(f"     ❌ 스케줄용 의사 이름 추출 실패")
     return None
 
-async def get_doctor_monthly_schedule_async(doctor_name):
-    """의사의 현재 달 당직 스케줄을 비동기로 조회"""
+async def get_doctor_monthly_schedule_async(doctor_name, target_date=None):
+    """의사의 당직 스케줄을 비동기로 조회 (특정 날짜/월 고려)"""
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, get_doctor_monthly_schedule, doctor_name)
+    return await loop.run_in_executor(None, get_doctor_monthly_schedule, doctor_name, target_date)
 
-def get_doctor_monthly_schedule(doctor_name):
-    """의사의 현재 달 당직 스케줄 조회"""
+def get_doctor_monthly_schedule(doctor_name, target_date=None):
+    """의사의 당직 스케줄 조회 (특정 날짜/월 고려)"""
     print(f"===== 의사 월간 스케줄 조회 시작 =====")
     print(f"     의사명: {doctor_name}")
+    print(f"     목표 날짜: {target_date}")
     
     try:
         from schedule.models import Doctor, Schedule
@@ -4165,15 +4587,26 @@ def get_doctor_monthly_schedule(doctor_name):
         
         print(f"     ✅ 의사 정보 발견: {doctor.name} ({doctor.department.name if doctor.department else 'N/A'})")
         
-        # 현재 달의 첫날과 마지막날 계산
-        today = datetime.now()
-        first_day = datetime(today.year, today.month, 1).date()
-        
-        # 다음 달의 첫날에서 하루 빼면 이번 달의 마지막날
-        if today.month == 12:
-            next_month = datetime(today.year + 1, 1, 1).date()
+        # 목표 월 계산
+        if target_date:
+            # 목표 날짜가 주어진 경우 해당 날짜의 월을 사용
+            target_datetime = datetime.strptime(target_date, '%Y-%m-%d')
+            target_year = target_datetime.year
+            target_month = target_datetime.month
         else:
-            next_month = datetime(today.year, today.month + 1, 1).date()
+            # 목표 날짜가 없으면 현재 월 사용
+            today = datetime.now()
+            target_year = today.year
+            target_month = today.month
+        
+        # 목표 월의 첫날과 마지막날 계산
+        first_day = datetime(target_year, target_month, 1).date()
+        
+        # 다음 달의 첫날에서 하루 빼면 해당 달의 마지막날
+        if target_month == 12:
+            next_month = datetime(target_year + 1, 1, 1).date()
+        else:
+            next_month = datetime(target_year, target_month + 1, 1).date()
         last_day = next_month - timedelta(days=1)
         
         print(f"     조회 기간: {first_day} ~ {last_day}")
@@ -4195,8 +4628,10 @@ def get_doctor_monthly_schedule(doctor_name):
         return {
             'doctor': doctor,
             'schedules': schedule_list,
-            'period': f"{first_day.strftime('%Y년 %m월')}",
-            'total_count': len(schedule_list)
+            'period': f"{target_year}년 {target_month}월",
+            'total_count': len(schedule_list),
+            'target_year': target_year,
+            'target_month': target_month
         }
         
     except Exception as e:
@@ -4238,14 +4673,23 @@ def format_doctor_monthly_schedule(schedule_data):
 # FastAPI 서버 실행 (개발용)
 if __name__ == "__main__":
     import uvicorn
+    
     print("\n" + "="*60)
     print("🔥 FastAPI 챗봇 서버를 시작합니다...")
     print("="*60)
-    print("🌐 서버 주소: http://localhost:8080")  
-    print("📚 API 문서: http://localhost:8080/docs")
-    print("💬 React 앱: http://localhost:3000")
-    print("📁 챗봇 대화 로그: logs/fastapi/chatbot/ 디렉토리 (*.txt 파일)")
-    print("⛔ 서버 종료: Ctrl+C")
+    
+    # 시스템 상태 체크
+    print("📋 시스템 상태 체크:")
+    print(f"   ✅ Django 설정: {'완료' if 'django' in sys.modules else '실패'}")
+    print(f"   ✅ 현재 경로: {os.getcwd()}")
+    
+    print("\n🌐 서버 정보:")
+    print("   🔗 FastAPI 서버: http://localhost:8080")  
+    print("   📚 API 문서: http://localhost:8080/docs")
+    print("   💬 React 프론트엔드: http://localhost:3000")
+    print("   📁 로그 위치: logs/fastapi/chatbot/")
+    print("   ⛔ 서버 종료: Ctrl+C")
     print("="*60 + "\n")
+    
     uvicorn.run(app, host="127.0.0.1", port=8080, log_level="info")
 
